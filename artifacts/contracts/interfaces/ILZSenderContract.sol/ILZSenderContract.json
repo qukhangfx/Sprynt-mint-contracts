@@ -50,7 +50,7 @@
           "type": "address"
         }
       ],
-      "name": "sendNftMitMessage",
+      "name": "sendNftMithMessage",
       "outputs": [],
       "stateMutability": "payable",
       "type": "function"

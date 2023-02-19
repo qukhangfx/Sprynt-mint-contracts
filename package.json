@@ -6,6 +6,7 @@
     "compile": "npx hardhat compile",
     "test": "npx hardhat test",
     "deploy": "npx hardhat run",
+    "deploy-main": "npx hardhat run deployMainContracts",
     "verify": "npx hardhat verify",
     "coverage": "npx hardhat coverage"
   },
@@ -25,6 +26,7 @@
     "dotenv": "^10.0.0",
     "ethereum-waffle": "^3.4.0",
     "hardhat": "^2.8.4",
+    "hardhat-dependency-compiler": "^1.1.3",
     "hardhat-gas-reporter": "^1.0.9",
     "minimist": "^1.2.5",
     "ts-generator": "^0.1.1",
@@ -41,6 +43,7 @@
     "erc721a": "^4.2.3",
     "ethers": "^5.5.4",
     "fs-extra": "^10.0.0",
+    "hardhat-change-network": "^0.0.7",
     "merkletreejs": "^0.2.32",
     "node-fetch": "^2.6.1",
     "request": "^2.88.2",

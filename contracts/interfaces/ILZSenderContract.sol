@@ -3,7 +3,7 @@ pragma solidity 0.8.17;
 
 interface ILZSenderContract {
 
-  function sendNftMitMessage(
+  function sendNftMithMessage(
     bytes calldata encodedPayload,
     address refundAddress
   ) external payable;

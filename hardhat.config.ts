@@ -5,6 +5,9 @@ import "@nomiclabs/hardhat-ethers";
 import "@openzeppelin/hardhat-upgrades";
 import "hardhat-gas-reporter";
 import "solidity-coverage";
+import "hardhat-change-network";
+import "hardhat-dependency-compiler";
+import './tasks';
 
 import * as dotenv from "dotenv";
 dotenv.config();
@@ -35,10 +38,7 @@ const chainIds = {
   arbitrumGoerli: 421613,
 };
 
-const GOERLI_ALCHEMY_KEY = process.env.GOERLI_ALCHEMY_KEY || "";
-const MUMBAI_ALCHEMY_KEY = process.env.MUMBAI_ALCHEMY_KEY || "";
 const PRIVATE_KEY = process.env.PK || "";
-const METIS_PK = process.env.METIS_PK || "";
 
 const ETHERSCAN_KEY = process.env.ETHERSCAN_KEY || "";
 const POLYGONSCAN_KEY = process.env.POLYGONSCAN_KEY || "";
@@ -47,13 +47,21 @@ const AVALANCHESCAN_KEY = process.env.AVALANCHESCAN_KEY || "";
 const FANTOM_KEY = process.env.FANTOMSCAN_KEY || "";
 const ARBISCAN_KEY = process.env.ARBISCAN_KEY || "";
 
+const TEST_ETH_RPC_URL = process.env.TEST_ETH_RPC_URL
+const TEST_BSC_RPC_URL = process.env.TEST_BSC_RPC_URL
+const TEST_POLYGON_RPC_URL = process.env.TEST_POLYGON_RPC_URL
+const TEST_AVAX_RPC_URL = process.env.TEST_AVAX_RPC_URL
+const TEST_FANTOM_RPC_URL = process.env.TEST_FANTOM_RPC_URL
+const TEST_ARBITRUM_RPC_URL = process.env.TEST_ARBITRUM_RPC_URL
+const TEST_METIS_RPC_URL = process.env.TEST_METIS_RPC_URL
 
-const ETH_RPC_URL = process.env.ETH_RPC_URL
-const BSC_RPC_URL = process.env.BSC_RPC_URL
-const POLYGON_RPC_URL = process.env.POLYGON_RPC_URL
-const AVAX_RPC_URL = process.env.AVAX_RPC_URL
-const FANTOM_RPC_URL = process.env.FANTOM_RPC_URL
-const ARBITRUM_RPC_URL = process.env.ARBITRUM_RPC_URL
+const MAIN_ETH_RPC_URL = process.env.MAIN_ETH_RPC_URL
+const MAIN_BSC_RPC_URL = process.env.MAIN_BSC_RPC_URL
+const MAIN_POLYGON_RPC_URL = process.env.MAIN_POLYGON_RPC_URL
+const MAIN_AVAX_RPC_URL = process.env.MAIN_AVAX_RPC_URL
+const MAIN_FANTOM_RPC_URL = process.env.MAIN_FANTOM_RPC_URL
+const MAIN_ARBITRUM_RPC_URL = process.env.MAIN_ARBITRUM_RPC_URL
+const MAIN_METIS_RPC_URL = process.env.MAIN_METIS_RPC_URL
 
 const config = {
   defaultNetwork: "hardhat",
@@ -61,68 +69,86 @@ const config = {
     hardhat: {
       // chainId: 1337
     },
-    goerli: {
-      url: `https://eth-goerli.g.alchemy.com/v2/${GOERLI_ALCHEMY_KEY}`,
-      chainId: chainIds.goerli,
-      accounts: [PRIVATE_KEY],
-      gasMultiplier: 1.25
-    },
     mainnet: {
-      url: ETH_RPC_URL,
+      url: MAIN_ETH_RPC_URL,
       chainId: chainIds.mainnet,
       accounts: [PRIVATE_KEY],
       gasMultiplier: 1.25
     },
+    goerli: {
+      url: TEST_ETH_RPC_URL,
+      chainId: chainIds.goerli,
+      accounts: [PRIVATE_KEY],
+      gasMultiplier: 1.25
+    },
     polygon: {
-      url: POLYGON_RPC_URL,
+      url: MAIN_POLYGON_RPC_URL,
       chainId: chainIds.polygon,
       accounts: [PRIVATE_KEY],
       gasMultiplier: 1.25
     },
     polygonMumbai: {
-      url: `https://polygon-mumbai.g.alchemy.com/v2/${MUMBAI_ALCHEMY_KEY}`,
+      url: TEST_POLYGON_RPC_URL,
       chainId: chainIds.mumbai,
       accounts: [PRIVATE_KEY],
       gasMultiplier: 1.25
     },
     bsc: {
-      url: BSC_RPC_URL,
+      url: MAIN_BSC_RPC_URL,
       chainId: chainIds.bsc,
       accounts: [PRIVATE_KEY],
       gasMultiplier: 1.25
     },
+    bscTestnet: {
+      url: TEST_BSC_RPC_URL,
+      chainId: chainIds.bscTestnet,
+      accounts: [PRIVATE_KEY],
+      gasMultiplier: 1.25
+    },
     avalanche: {
-      url: AVAX_RPC_URL,
+      url: MAIN_AVAX_RPC_URL,
       chainId: chainIds.avalanche,
       accounts: [PRIVATE_KEY],
       gasMultiplier: 1.25
     },
+    avalancheFujiTestnet: {
+      url: TEST_AVAX_RPC_URL,
+      chainId: chainIds.fuji,
+      accounts: [PRIVATE_KEY],
+      gasMultiplier: 1.25
+    },
     opera: {
-      url: FANTOM_RPC_URL,
+      url: MAIN_FANTOM_RPC_URL,
       chainId: chainIds.opera,
       accounts: [PRIVATE_KEY],
       gasMultiplier: 1.25
     },
-    metisgoerli: {
-      url: "https://goerli.gateway.metisdevops.link",
+    ftmTestnet: {
+      url: TEST_FANTOM_RPC_URL,
+      chainId: chainIds.ftmTestnet,
       accounts: [PRIVATE_KEY],
-      chainId: chainIds.metisgoerli,
       gasMultiplier: 1.25
     },
     andromeda: {
-      url: "https://andromeda.metis.io/?owner=1088",
+      url: MAIN_METIS_RPC_URL,
       accounts: [PRIVATE_KEY],
       chainId: chainIds.andromeda,
       gasMultiplier: 1.25
     },
+    metisgoerli: {
+      url: TEST_METIS_RPC_URL,
+      accounts: [PRIVATE_KEY],
+      chainId: chainIds.metisgoerli,
+      gasMultiplier: 1.25
+    },
     arbitrumOne: {
-      url: ARBITRUM_RPC_URL,
+      url: MAIN_ARBITRUM_RPC_URL,
       accounts: [PRIVATE_KEY],
       chainId: chainIds.arbitrum,
       gasMultiplier: 1.25
     },
     arbitrumGoerli: {
-      url: ARBITRUM_RPC_URL,
+      url: TEST_ARBITRUM_RPC_URL,
       accounts: [PRIVATE_KEY],
       chainId: chainIds.arbitrumGoerli,
       gasMultiplier: 1.25
@@ -191,6 +217,11 @@ const config = {
   gasReporter: {
     enabled: process.env.REPORT_GAS !== undefined,
     currency: "USD",
+  },
+  dependencyCompiler: {
+    paths: [
+      '@layerzerolabs/solidity-examples/contracts/mocks/LZEndpointMock.sol',
+    ],
   }
 };
 

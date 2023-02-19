@@ -1,0 +1,4 @@
+{
+  "mainnet": ["mainnet", "bsc", "avalanche", "polygon", "arbitrumOne", "opera", "andromeda"],
+  "testnet": ["goerli", "polygonMumbai"]
+}

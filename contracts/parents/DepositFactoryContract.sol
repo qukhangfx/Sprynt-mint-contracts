@@ -19,7 +19,7 @@ contract DepositFactoryContract is AccessControl, EIP712, ReentrancyGuard, Pausa
 
   event SetAdminWallet(address adminWallet);
   event SetPlatformFee(uint96 platformFee);
-  event DepositedToken(DepositItem depositItem);
+  event DepositedToken(DepositItem depositItem, uint256 lzGasFee, bool isNativeToken);
   event CreatedLZSenderContract(address seller, address receiveFactoryContract, uint16 dstChainId);
   
   bytes32 public constant DEPOSIT_ROLE = keccak256("DEPOSIT_ROLE");
@@ -92,13 +92,17 @@ contract DepositFactoryContract is AccessControl, EIP712, ReentrancyGuard, Pausa
   function depositTokenByClient(
     DepositItem calldata depositItem,
     bytes calldata signature,
-    uint256 lzGasFee
+    uint256 lzGasFee,
+    bool isNativeToken
   ) external nonReentrant whenNotPaused payable {
     require(msg.sender == tx.origin, "Contract address is not allowed");
     require(block.timestamp <= depositItem.deadline, "Invalid expiration in deposit");
     require(depositItem.isMintAvailable, "Mint is not available");
     address lzSenderContractAddress = lzSenderContracts[depositItem.sellerAddress][depositItem.dstChainId];
     require(lzSenderContractAddress != address(0), "LZSender contract is not created");
+    if (isNativeToken) {
+      require(msg.value >= lzGasFee + depositItem.mintPrice, "Insufficient native token balances");
+    }
     require(
       _verify(
         _hashTypedDataV4(
@@ -122,52 +126,22 @@ contract DepositFactoryContract is AccessControl, EIP712, ReentrancyGuard, Pausa
     Address.functionCallWithValue(
       lzSenderContractAddress, 
       abi.encodeWithSignature(
-        "sendNftMitMessage(bytes calldata, address)", 
+        "sendNftMithMessage(bytes calldata, address)", 
         encodedPayload, msg.sender
       ),
       lzGasFee,
       "Failed to send LZ message"
     );
-    IERC20(_acceptToken).safeTransferFrom(msg.sender, _adminWallet, platformFeeAmount);
-    IERC20(_acceptToken).safeTransferFrom(msg.sender, depositItem.sellerAddress, userProfit);
+    if (isNativeToken) {
+      Address.sendValue(payable(_adminWallet), platformFeeAmount);
+      Address.sendValue(payable(depositItem.sellerAddress), userProfit);
+    } else {
+      IERC20(_acceptToken).safeTransferFrom(msg.sender, _adminWallet, platformFeeAmount);
+      IERC20(_acceptToken).safeTransferFrom(msg.sender, depositItem.sellerAddress, userProfit);
+    }
     
-    emit DepositedToken(depositItem);
+    emit DepositedToken(depositItem, lzGasFee, isNativeToken);
   }
-  
-  // function depositNativeToken(
-  //   DepositItem calldata depositItem,
-  //   bytes calldata signature
-  // ) external nonReentrant whenNotPaused payable {
-  //   require(msg.sender == tx.origin, "Contract address is not allowed");
-  //   require(msg.value > depositItem.mintPrice, "Insufficient amount");
-  //   require(block.timestamp <= depositItem.deadline, "Invalid expiration in deposit");
-  //   require(depositItem.isMintAvailable, "Mint is not available");
-  //   require(
-  //     _verify(
-  //       _hashTypedDataV4(
-  //         Domain._hashDepositItem(
-  //           depositItem, 
-  //           _accountNonces[msg.sender]
-  //         )
-  //       ),
-  //     signature
-  //   ), "Invalid signature");
-  //   unchecked {
-  //     ++ _accountNonces[msg.sender];
-  //   }
-  //   uint256 platformFeeAmount = _calcFeeAmount(depositItem.mintPrice, platformFee);
-  //   uint256 userProfit = depositItem.mintPrice - platformFeeAmount;
-  //   bytes memory encodedPayload = abi.encodePacked(
-  //     PAYLOAD_MINT_NFT,
-  //     msg.sender,
-  //     depositItem.mintQuantity,
-  //     depositItem.sellerAddress
-  //   );
-  //   _lzSend(depositItem.dstChainId, encodedPayload, payable(msg.sender), address(0x0), bytes(""), msg.value);
-  //   Address.sendValue(payable(_adminWallet), platformFeeAmount);
-  //   Address.sendValue(payable(depositItem.sellerAddress), userProfit);
-  //   emit DepositedToken(depositItem);
-  // }
 
   function _calcFeeAmount(uint256 amount, uint96 fee) internal pure returns (uint256) {
     unchecked { return amount * fee / 10000; }
