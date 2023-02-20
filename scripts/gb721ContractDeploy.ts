@@ -1,5 +1,5 @@
 import { ethers } from 'hardhat'
-import { load, save } from "./utils"
+import { load, save } from "../utils"
 
 import * as dotenv from "dotenv";
 dotenv.config();

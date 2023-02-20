@@ -1,14 +1,12 @@
-import hre from "hardhat";
 import { Deployer } from "./Deployer";
-import { load, save } from "./utils";
+import { load, save } from "../utils";
 import deployChains from "../constants/deployChains.json";
 import usdcAddresses from "../constants/usdcAddresses.json";
 import layerzeroConfig from "../constants/layerzeroConfig.json";
 
 import { DepositFactoryContract, ReceiveFactoryContract } from "../typechain-types";
 
-export const deployMainContracts = async (taskArgs: any) => {
-  
+export const deployMainContracts = async (taskArgs: any, hre: any) => {
   const networks = deployChains[taskArgs.e]
   if (!taskArgs.e || networks.length === 0) {
     console.log(`Invalid environment argument: ${taskArgs.e}`)
@@ -21,7 +19,10 @@ export const deployMainContracts = async (taskArgs: any) => {
   let receiveFactoryContractData = {};
   await Promise.all(
     networks.map(async (network: string) => {
-      await deployer.switchNetwork(network);
+      if (hre.network.name !== network) {
+        await hre.changeNetwork(network);
+        console.log(`Deployer: switched on ${network}`);
+      }
       const networkName = hre.network.name;
       console.log(networkName, network);
 

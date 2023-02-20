@@ -20,7 +20,7 @@ contract DepositFactoryContract is AccessControl, EIP712, ReentrancyGuard, Pausa
   event SetAdminWallet(address adminWallet);
   event SetPlatformFee(uint96 platformFee);
   event DepositedToken(DepositItem depositItem, uint256 lzGasFee, bool isNativeToken);
-  event CreatedLZSenderContract(address seller, address receiveFactoryContract, uint16 dstChainId);
+  event CreatedLZSenderContract(address seller, address newLzSenderContract, address receiveFactoryContract, uint16 dstChainId);
   
   bytes32 public constant DEPOSIT_ROLE = keccak256("DEPOSIT_ROLE");
 
@@ -76,17 +76,17 @@ contract DepositFactoryContract is AccessControl, EIP712, ReentrancyGuard, Pausa
     address receiveFactoryContract,
     uint16 dstChainId
   ) 
-  external {
+  external returns (address lzSenderContractAddress) {
     LZSenderContract newSenderContract = new LZSenderContract(
       layerZeroEndpoint,
       dstChainId
     );
-    address newContractAddress = address(newSenderContract);
-    bytes memory _path = abi.encodePacked(receiveFactoryContract, newContractAddress);
+    lzSenderContractAddress = address(newSenderContract);
+    bytes memory _path = abi.encodePacked(receiveFactoryContract, lzSenderContractAddress);
     newSenderContract.setTrustedRemote(dstChainId, _path);
-    lzSenderContracts[msg.sender][dstChainId] = newContractAddress;
+    lzSenderContracts[msg.sender][dstChainId] = lzSenderContractAddress;
 
-    emit CreatedLZSenderContract(msg.sender, receiveFactoryContract, dstChainId);
+    emit CreatedLZSenderContract(msg.sender, lzSenderContractAddress, receiveFactoryContract, dstChainId);
   }
 
   function depositTokenByClient(

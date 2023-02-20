@@ -11,11 +11,9 @@ import './tasks';
 
 import * as dotenv from "dotenv";
 dotenv.config();
-
 const chainIds = {
   // ethereum
   mainnet: 1,
-  rinkeby: 4,
   goerli: 5,
   ropsten: 3,
   // polygon
@@ -217,6 +215,12 @@ const config = {
   gasReporter: {
     enabled: process.env.REPORT_GAS !== undefined,
     currency: "USD",
+  },
+  contractSizer: {
+    alphaSort: true,
+    disambiguatePaths: false,
+    runOnCompile: false,
+    strict: true
   },
   dependencyCompiler: {
     paths: [
