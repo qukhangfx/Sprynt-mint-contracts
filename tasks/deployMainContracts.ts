@@ -25,6 +25,7 @@ export const deployMainContractsByAdmin = async (taskArgs: any, hre: any) => {
     const [signer] = await hre.ethers.getSigners();
     const depositFactory = await hre.ethers.getContractFactory("DepositFactoryContract");
     const depositFactoryContract = await depositFactory.connect(signer).deploy(
+      layerzeroConfig[networkName].lzEndpoint,
       usdcAddresses[networkName], 
       ownerAccount, 
       adminWalletAccount,
@@ -43,23 +44,6 @@ export const deployMainContractsByAdmin = async (taskArgs: any, hre: any) => {
     console.log(`ReceiveFactoryContract is deployed at: ${receiveFactoryContract.address}`);
 
     receiveFactoryContractData[networkName] = receiveFactoryContract.address;
-
-    // verify contracts
-    await hre.run("verify:verify", {
-      address: depositFactoryContract.address,
-      constructorArguments: [
-        usdcAddresses[networkName], 
-        ownerAccount, 
-        adminWalletAccount,
-        depositRoleAccount,
-      ],
-    });
-    await hre.run("verify:verify", {
-      address: receiveFactoryContract.address,
-      constructorArguments: [
-        layerzeroConfig[networkName].lzEndpoint
-      ],
-    });
   }
   
   await save('DepositFactoryContracts', depositFactoryContractData);

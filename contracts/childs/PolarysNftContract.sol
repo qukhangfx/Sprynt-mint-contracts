@@ -17,10 +17,12 @@ contract PolarysNftContract is IPolarysNftContract, ERC721A, AccessControl, Reen
     string memory name, 
     string memory symbol,
     string memory tokenUri,
-    uint256 maxSupply
+    uint256 maxSupply,
+    address factoryContractAddress
   ) ERC721A(name, symbol) {
     baseURI = tokenUri;
     MAX_SUPPLY = maxSupply;
+    _grantRole(FACTORY_CONTRACT_ROLE, factoryContractAddress);
   }
 
   function supportsInterface(bytes4 interfaceId) public view virtual override(AccessControl, ERC721A) returns (bool) {
@@ -51,10 +53,8 @@ contract PolarysNftContract is IPolarysNftContract, ERC721A, AccessControl, Reen
     uint256 quantity
   ) external onlyRole(FACTORY_CONTRACT_ROLE) nonReentrant {
     require(to != address(0), "Address must not be zero address");
-    // require(royaltyFee <= 10000, "RoyaltyFee must not be greater than 100%");
     uint256 totalSupply = totalSupply();
     require(totalSupply <= MAX_SUPPLY, "Cannot mint more than MAX_SUPPLY NFTs");
-    // _setDefaultRoyalty(msg.sender, royaltyFee); 
     _mint(to, quantity);
   }
 

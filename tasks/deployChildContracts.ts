@@ -2,43 +2,63 @@ import { load, save } from "../utils";
 import deployChains from "../constants/deployChains.json";
 import usdcAddresses from "../constants/usdcAddresses.json";
 import layerzeroConfig from "../constants/layerzeroConfig.json";
-import { DepositFactoryContract } from "../typechain-types";
+import { DepositFactoryContract, ReceiveFactoryContract } from "../typechain-types";
+
+const nftName = "Polarys test NFTS";
+const nftSymbol = "PTN";
+const tokenURI = "https://bafybeidyj2ases25wrcwyisxsbnfo6qe7oe4re5ql77uspoo6d33benknq.ipfs.nftstorage.link/";
+const totalSupply = 100;
 
 export const deployChildContractsBySeller = async (taskArgs: any, hre: any) => {
-  const sendChains:string[] = (taskArgs.schains).split(",");
-  const mintChain:string = taskArgs.dchain
+  const mintChain:string = taskArgs.mchain
   
-  let lzSendContractsData = await load('LzSendContractsData');
   let nftMintContractsData = await load('NftMintContractsData');
-  for(const sendChain of sendChains) {
-    try {
-      if (hre.network.name !== sendChain) {
-        await hre.changeNetwork(sendChain);
-        console.log(`Deployer: switched on ${sendChain}`);
-      }
-      
-      const depositFactoryContractAddress = (await load('DepositFactoryContracts'))[sendChain];
-      const receiveFactoryContractAddress = (await load('ReceiveFactoryContracts'))[mintChain];
-      const depositFactoryContract = (
-        await hre.ethers.getContractAt(
-          'DepositFactoryContract', 
-          depositFactoryContractAddress
-          )
-        ) as DepositFactoryContract;
-      console.log(`Creating LzSendContract to ${sendChain}`);
-      const tx = await depositFactoryContract.createLZsenderContractBySeller(
-        layerzeroConfig[sendChain].lzEndpoint,
-        receiveFactoryContractAddress,
-        layerzeroConfig[mintChain].chainId,
-      );
-      const txResult = await(tx).wait();
-      console.log(txResult);
-    } catch (e) {
-      console.log(e);
-      continue;
+  try {
+    if (hre.network.name !== mintChain) {
+      await hre.changeNetwork(mintChain);
+      console.log(`Deployer: switched on ${mintChain}`);
     }
+    
+    const receiveFactoryContractAddress = (await load('ReceiveFactoryContracts'))[mintChain];
+    const receiveFactoryContract = (
+      await hre.ethers.getContractAt(
+        'ReceiveFactoryContract', 
+        receiveFactoryContractAddress
+        )
+      ) as ReceiveFactoryContract;
+    console.log(`Creating PolarysNftContract to ${mintChain}`);
+    const txResult = await(
+      await receiveFactoryContract.createNftContractBySeller(
+        nftName,
+        nftSymbol,
+        tokenURI,
+        totalSupply
+      )
+    ).wait();
+    if (txResult.status == 1) {
+      const events = txResult.events;
+      if (events && events.length) {
+        for (const eventObject of events) {
+          if (eventObject.event == "CreatedNftContract") {
+            const nftContractAddress = eventObject.args["nftContractAddress"];
+            nftMintContractsData[mintChain] = {
+              nftContract: nftContractAddress,
+              factoryContract: receiveFactoryContractAddress,
+              nftName,
+              nftSymbol,
+              tokenURI,
+              totalSupply
+            };
+            console.log(`NftContract is deployed at: ${nftContractAddress}`);
+            break;
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.log(e);
   }
   
-  // await save('DepositFactoryContracts', depositFactoryContractData);
-  // await save('ReceiveFactoryContracts', receiveFactoryContractData);
+  await save('LzSendContractsData', lzSendContractsData);
+  await save('NftMintContractsData', nftMintContractsData);
 }
