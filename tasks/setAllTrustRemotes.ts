@@ -2,50 +2,57 @@ import { load, save } from "../utils";
 import deployChains from "../constants/deployChains.json";
 import usdcAddresses from "../constants/usdcAddresses.json";
 import layerzeroConfig from "../constants/layerzeroConfig.json";
+import { DepositFactoryContract, ReceiveFactoryContract } from "../typechain-types";
 
 export const setAllTrustRemotes = async (taskArgs: any, hre: any) => {
-  // const network_environment = taskArgs.e;
-  // const networks = deployChains[network_environment];
-  // if (!taskArgs.e || networks.length === 0) {
-  //   console.log(`Invalid environment argument: ${taskArgs.e}`)
-  // }
-  // const ownerAccount = process.env.OWNER_ADDRESS || "";
-  // const adminWalletAccount = process.env.ADMIN_WALLET_ADDRESS || "";
-  // const depositRoleAccount = process.env.DEPOSIT_ROLE_ACCOUNT || "";
-  // let depositFactoryContractData = await load('DepositFactoryContracts');
-  // let receiveFactoryContractData = await load('ReceiveFactoryContracts');
-  // for(const networkName of networks) {
-  //   if (hre.network.name !== networkName) {
-  //     await hre.changeNetwork(networkName);
-  //     console.log(`Deployer: switched on ${networkName}`);
-  //   }
+  let depositFactoryContractData = await load('DepositFactoryContracts');
+  let receiveFactoryContractData = await load('ReceiveFactoryContracts');
 
-  //   // deploy contracts
-  //   console.log(`Deploying DepositFactoryContract to ${networkName}`);
-  //   const [signer] = await hre.ethers.getSigners();
-  //   const depositFactory = await hre.ethers.getContractFactory("DepositFactoryContract");
-  //   const depositFactoryContract = await depositFactory.connect(signer).deploy(
-  //     layerzeroConfig[networkName].lzEndpoint,
-  //     usdcAddresses[networkName], 
-  //     ownerAccount, 
-  //     adminWalletAccount,
-  //     depositRoleAccount,
-  //   );
-  //   await depositFactoryContract.deployed();
-  //   console.log(`DepositFactoryContract is deployed at: ${depositFactoryContract.address}`);
-  //   depositFactoryContractData[networkName] = depositFactoryContract.address;
+  // set trustRemote from source to dest chains
+  console.log("set trustRemote from source to dest chains")
+  for(const [srcNetworkName, sourceContractAddress] of Object.entries(depositFactoryContractData)) {
+    if (hre.network.name !== srcNetworkName) {
+      await hre.changeNetwork(srcNetworkName);
+      console.log(`setAllTrustRemote: switched on ${srcNetworkName}`);
+    }
 
-  //   console.log(`Deploying ReceiveFactoryContract to ${networkName}`);
-  //   const receiveFactory = await hre.ethers.getContractFactory("ReceiveFactoryContract");
-  //   const receiveFactoryContract = await receiveFactory.connect(signer).deploy(
-  //     layerzeroConfig[networkName].lzEndpoint
-  //   );
-  //   await receiveFactoryContract.deployed();
-  //   console.log(`ReceiveFactoryContract is deployed at: ${receiveFactoryContract.address}`);
+    const depositFactoryContract = (
+      await hre.ethers.getContractAt(
+        'DepositFactoryContract', 
+        sourceContractAddress
+        )
+      ) as DepositFactoryContract;
 
-  //   receiveFactoryContractData[networkName] = receiveFactoryContract.address;
-  // }
+    for (const [dstNetworkName, destContractAddress] of Object.entries(receiveFactoryContractData)) {
+      console.log(`Set trustRemote from ${srcNetworkName} to ${dstNetworkName}`);
+      await (await depositFactoryContract.setTrustedRemote(
+        layerzeroConfig[dstNetworkName].chainId,
+        hre.ethers.utils.solidityPack(["address", "address"], [destContractAddress, sourceContractAddress])
+      )).wait();
+    }
+  }
+
+  // set trustRemote from dest to source chains
+  console.log("set trustRemote from dest to source chains")
+  for (const [dstNetworkName, destContractAddress] of Object.entries(receiveFactoryContractData)) {
+    if (hre.network.name !== dstNetworkName) {
+      await hre.changeNetwork(dstNetworkName);
+      console.log(`setAllTrustRemote: switched on ${dstNetworkName}`);
+    }
+
+    const receiveFactoryContract = (
+    await hre.ethers.getContractAt(
+      'ReceiveFactoryContract', 
+      destContractAddress
+      )
+    ) as ReceiveFactoryContract;
+    for(const [srcNetworkName, sourceContractAddress] of Object.entries(depositFactoryContractData)) {
+      console.log(`Set trustRemote from ${dstNetworkName} to ${srcNetworkName}`);
+      await (await receiveFactoryContract.setTrustedRemote(
+        layerzeroConfig[srcNetworkName].chainId,
+        hre.ethers.utils.solidityPack(["address", "address"], [sourceContractAddress, destContractAddress])
+      )).wait();
+    }
+  }
   
-  // await save('DepositFactoryContracts', depositFactoryContractData);
-  // await save('ReceiveFactoryContracts', receiveFactoryContractData);
 }

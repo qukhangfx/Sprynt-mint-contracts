@@ -4,6 +4,7 @@ import { verifyMainContractsByAdmin } from './verifyMainContracts'
 import { deployChildContractsBySeller } from './deployChildContracts'
 import { verifyChildContractsBySeller } from './verifyChildContracts'
 import { setAllTrustRemotes } from './setAllTrustRemotes'
+import { depositTokenByClient } from './depositTokenTest'
 
 task(
   'deployMain',
@@ -34,3 +35,11 @@ task(
   'verify child contracts by seller',
   verifyChildContractsBySeller
 )
+
+task(
+  'depositTokenTest',
+  'client deposits tokens and receives nfts',
+  depositTokenByClient
+).addParam('dchain', 'deposit chain', 'goerli')
+.addParam('mchain', 'mint chain', 'polygonMumbai')
+.addParam('bnonce', 'backend nonce value')

@@ -59,6 +59,5 @@ export const deployChildContractsBySeller = async (taskArgs: any, hre: any) => {
     console.log(e);
   }
   
-  await save('LzSendContractsData', lzSendContractsData);
   await save('NftMintContractsData', nftMintContractsData);
 }
