@@ -1,1 +1,1 @@
-# multichain minting engine contracts
+# Sprynt mint contracts
