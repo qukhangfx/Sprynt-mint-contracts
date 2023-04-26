@@ -1,0 +1,67 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.17;
+
+import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+
+contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard {
+    bytes32 public constant FACTORY_CONTRACT_ROLE =
+        keccak256("FACTORY_CONTRACT_ROLE");
+
+    string private baseURI;
+
+    constructor(
+        address factoryContractAddress,
+        string memory tokenURI
+    ) ERC1155(tokenURI) {
+        baseURI = tokenURI;
+        _grantRole(FACTORY_CONTRACT_ROLE, factoryContractAddress);
+    }
+
+    function supportsInterface(
+        bytes4 interfaceId
+    ) public view override(AccessControl, ERC1155) returns (bool) {
+        return super.supportsInterface(interfaceId);
+    }
+
+    function setBaseURI(
+        string calldata uri
+    ) external onlyRole(FACTORY_CONTRACT_ROLE) {
+        baseURI = uri;
+    }
+
+    function getBaseURI() external view returns (string memory) {
+        return baseURI;
+    }
+
+    function setFactoryContractAddress(
+        address factoryContractAddress
+    ) external onlyRole(FACTORY_CONTRACT_ROLE) {
+        require(
+            factoryContractAddress != address(0),
+            "contract address must not be zero address"
+        );
+        _grantRole(FACTORY_CONTRACT_ROLE, factoryContractAddress);
+    }
+
+    function mintToken(
+        address to,
+        uint256 id,
+        uint256 quantity,
+        bytes calldata data
+    ) external onlyRole(FACTORY_CONTRACT_ROLE) nonReentrant {
+        require(to != address(0), "Address must not be zero address");
+        _mint(to, id, quantity, data);
+    }
+
+    function mintBatchToken(
+        address to,
+        uint256[] calldata ids,
+        uint256[] calldata amounts,
+        bytes calldata data
+    ) external onlyRole(FACTORY_CONTRACT_ROLE) nonReentrant {
+        require(to != address(0), "Address must not be zero address");
+        _mintBatch(to, ids, amounts, data);
+    }
+}
