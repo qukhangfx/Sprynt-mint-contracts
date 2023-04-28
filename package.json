@@ -40,6 +40,7 @@
     "@nomicfoundation/hardhat-network-helpers": "^1.0.7",
     "@openzeppelin/contracts": "^4.8.0",
     "@openzeppelin/hardhat-upgrades": "^1.19.0",
+    "@optionality.io/clone-factory": "^0.2.1",
     "erc721a": "^4.2.3",
     "ethers": "^5.5.4",
     "fs-extra": "^10.0.0",
