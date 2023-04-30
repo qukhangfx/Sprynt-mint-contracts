@@ -48,6 +48,8 @@ contract DepositFactoryContract is
 
     mapping(address => bool) private _depositContracts;
 
+    event MasterDepositContractCreated(address masterDepositContractAddress);
+
     constructor(
         address _layerZeroEndpoint,
         address acceptToken,
@@ -85,20 +87,23 @@ contract DepositFactoryContract is
         uint256 totalSupply,
         uint256 deadline
     ) public onlyOwner {
-        DepositContract masterDepositContract = new DepositContract(
-            sellerAddress,
-            tokenAddress,
-            dstChainId,
-            mintPrice,
-            whiteListMintPrice,
-            minMintQuantity,
-            maxMintQuantity,
-            totalSupply,
-            deadline,
-            address(this)
+        address masterDepositContractAddress = address(
+            new DepositContract(
+                sellerAddress,
+                tokenAddress,
+                dstChainId,
+                mintPrice,
+                whiteListMintPrice,
+                minMintQuantity,
+                maxMintQuantity,
+                totalSupply,
+                deadline,
+                address(this)
+            )
         );
-        _depositContracts[address(masterDepositContract)] = true;
-        setMasterDepositContractAddress(address(masterDepositContract));
+        _depositContracts[masterDepositContractAddress] = true;
+        setMasterDepositContractAddress(masterDepositContractAddress);
+        emit MasterDepositContractCreated(masterDepositContractAddress);
     }
 
     function deployClonedDepositContract(
@@ -177,7 +182,6 @@ contract DepositFactoryContract is
         uint256 lzGasFee,
         bool isNativeToken
     ) external payable nonReentrant whenNotPaused onlyContract {
-        require(msg.sender == tx.origin, "Contract address is not allowed");
         require(
             block.timestamp <= depositItem.deadline,
             "Invalid expiration in deposit"
@@ -189,17 +193,14 @@ contract DepositFactoryContract is
                 "Insufficient native token balances"
             );
         } else {
-            require(
-                msg.value >= lzGasFee,
-                "Insufficient native token balances"
-            );
+            require(msg.value >= lzGasFee, "Insufficient ERC20 token balances");
         }
         require(
             _verify(
                 _hashTypedDataV4(
                     Domain._hashDepositItem(
                         depositItem,
-                        _accountNonces[msg.sender]
+                        _accountNonces[tx.origin]
                     )
                 ),
                 signature
@@ -207,7 +208,7 @@ contract DepositFactoryContract is
             "Invalid signature"
         );
         unchecked {
-            ++_accountNonces[msg.sender];
+            ++_accountNonces[tx.origin];
         }
         uint256 platformFeeAmount = _calcFeeAmount(
             depositItem.mintPrice,
@@ -215,15 +216,17 @@ contract DepositFactoryContract is
         );
         uint256 userProfit = depositItem.mintPrice - platformFeeAmount;
         bytes memory encodedPayload = abi.encode(
-            msg.sender,
+            tx.origin,
+            1,
             depositItem.mintQuantity,
+            "Test NFTs",
             depositItem.sellerAddress
         );
 
         _lzSend(
             depositItem.dstChainId,
             encodedPayload,
-            payable(msg.sender),
+            payable(tx.origin),
             address(0x0),
             bytes(""),
             lzGasFee
@@ -234,12 +237,12 @@ contract DepositFactoryContract is
             Address.sendValue(payable(depositItem.sellerAddress), userProfit);
         } else {
             IERC20(_acceptToken).safeTransferFrom(
-                msg.sender,
+                tx.origin,
                 _adminWallet,
                 platformFeeAmount
             );
             IERC20(_acceptToken).safeTransferFrom(
-                msg.sender,
+                tx.origin,
                 depositItem.sellerAddress,
                 userProfit
             );

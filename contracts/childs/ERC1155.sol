@@ -12,8 +12,8 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard {
     string private baseURI;
 
     constructor(
-        address factoryContractAddress,
-        string memory tokenURI
+        string memory tokenURI,
+        address factoryContractAddress
     ) ERC1155(tokenURI) {
         baseURI = tokenURI;
         _grantRole(FACTORY_CONTRACT_ROLE, factoryContractAddress);
@@ -49,7 +49,7 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard {
         address to,
         uint256 id,
         uint256 quantity,
-        bytes calldata data
+        bytes memory data
     ) external onlyRole(FACTORY_CONTRACT_ROLE) nonReentrant {
         require(to != address(0), "Address must not be zero address");
         _mint(to, id, quantity, data);
@@ -57,9 +57,9 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard {
 
     function mintBatchToken(
         address to,
-        uint256[] calldata ids,
-        uint256[] calldata amounts,
-        bytes calldata data
+        uint256[] memory ids,
+        uint256[] memory amounts,
+        bytes memory data
     ) external onlyRole(FACTORY_CONTRACT_ROLE) nonReentrant {
         require(to != address(0), "Address must not be zero address");
         _mintBatch(to, ids, amounts, data);

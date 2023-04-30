@@ -69,12 +69,9 @@ contract DepositContract {
         uint256 lzGasFee,
         bool isNativeToken
     ) public payable {
-        DepositFactoryContract(_factoryContractAddress).depositTokenByClient(
-            depositItem,
-            signature,
-            lzGasFee,
-            isNativeToken
-        );
+        DepositFactoryContract(_factoryContractAddress).depositTokenByClient{
+            value: msg.value
+        }(depositItem, signature, lzGasFee, isNativeToken);
     }
 
     modifier onlyPermissioned() {
