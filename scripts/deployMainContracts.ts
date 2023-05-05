@@ -1,15 +1,13 @@
 import { Deployer } from "./Deployer";
-import { load, save } from "../utils";
+import { save } from "../utils";
 import deployChains from "../constants/deployChains.json";
 import usdcAddresses from "../constants/usdcAddresses.json";
 import layerzeroConfig from "../constants/layerzeroConfig.json";
 
-import { DepositFactoryContract, ReceiveFactoryContract } from "../typechain-types";
-
 export const deployMainContracts = async (taskArgs: any, hre: any) => {
-  const networks = deployChains[taskArgs.e]
+  const networks = deployChains[taskArgs.e];
   if (!taskArgs.e || networks.length === 0) {
-    console.log(`Invalid environment argument: ${taskArgs.e}`)
+    console.log(`Invalid environment argument: ${taskArgs.e}`);
   }
   const deployer = new Deployer();
   const ownerAccount = process.env.OWNER_ADDRESS || "";
@@ -26,14 +24,13 @@ export const deployMainContracts = async (taskArgs: any, hre: any) => {
       const networkName = hre.network.name;
       console.log(networkName, network);
 
-      console.log(
-        `Deploying DepositFactoryContract to ${network}`
-      );
+      console.log(`Deploying DepositFactoryContract to ${network}`);
       const depositFactoryContract = await deployer.deploy(
         "DepositFactoryContract",
         [
-          usdcAddresses[network], 
-          ownerAccount, 
+          layerzeroConfig[network].lzEndpoint,
+          usdcAddresses[network],
+          ownerAccount,
           adminWalletAccount,
           depositRoleAccount,
         ]
@@ -41,19 +38,19 @@ export const deployMainContracts = async (taskArgs: any, hre: any) => {
 
       depositFactoryContractData[networkName] = depositFactoryContract.address;
 
-      console.log(
-        `Deploying ReceiveFactoryContract to ${network}`
-      );
+      console.log(`Deploying ReceiveFactoryContract to ${network}`);
       const receiveFactoryContract = await deployer.deploy(
         "ReceiveFactoryContract",
-        [
-          layerzeroConfig[network].lzEndpoint
-        ]
+        [layerzeroConfig[network].lzEndpoint]
       );
 
       receiveFactoryContractData[networkName] = receiveFactoryContract.address;
+
+      console.log("depositFactoryContractData", depositFactoryContract.address);
+      console.log("receiveFactoryContractData", receiveFactoryContract.address);
     })
-  )
-  await save('DepositFactoryContracts', depositFactoryContractData);
-  await save('ReceiveFactoryContracts', receiveFactoryContractData);
-}
+  );
+
+  await save("DepositFactoryContracts", depositFactoryContractData);
+  await save("ReceiveFactoryContracts", receiveFactoryContractData);
+};

@@ -29,9 +29,9 @@
   },
 
   
-  "goerli": {
-    "chainId": 10121,
-    "lzEndpoint": "0xbfD2135BFfbb0B5378b56643c2Df8a87552Bfa23"
+  "sepolia": {
+    "chainId": 10161,
+    "lzEndpoint": "0xae92d5aD7583AD66E49A0c67BAd18F6ba52dDDc1"
   },
   "polygonMumbai": {
     "chainId": 10109,

@@ -1,10 +1,7 @@
 {
   "polygonMumbai": {
-    "nftContract": "0xd8b08619DfB1a338E781A5912a32D217a47fD8F3",
-    "factoryContract": "0x4843A777B453e3a86818E3492d0FA12A155d29F8",
-    "nftName": "Polarys test NFTS",
-    "nftSymbol": "PTN",
-    "tokenURI": "https://bafybeidyj2ases25wrcwyisxsbnfo6qe7oe4re5ql77uspoo6d33benknq.ipfs.nftstorage.link/",
-    "totalSupply": 100
+    "nftContract": "0x59acBc36D4F1713277Faf91B408859331fB29c8F",
+    "factoryContract": "0xC5477d6CEDF335e7f842DCDF10ed0cC97BC8b1Ae",
+    "tokenURI": "https://bafybeidyj2ases25wrcwyisxsbnfo6qe7oe4re5ql77uspoo6d33benknq.ipfs.nftstorage.link/"
   }
 }

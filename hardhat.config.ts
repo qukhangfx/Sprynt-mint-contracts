@@ -14,7 +14,7 @@ dotenv.config();
 const chainIds = {
   // ethereum
   mainnet: 1,
-  goerli: 5,
+  sepolia: 11155111,
   ropsten: 3,
   // polygon
   mumbai: 80001,
@@ -73,11 +73,12 @@ const config = {
       accounts: [PRIVATE_KEY],
       gasMultiplier: 1.25
     },
-    goerli: {
+    sepolia: {
       url: TEST_ETH_RPC_URL,
-      chainId: chainIds.goerli,
+      chainId: chainIds.sepolia,
       accounts: [PRIVATE_KEY],
-      gasMultiplier: 1.25
+      gasMultiplier: 1.25,
+      allowUnlimitedContractSize: true,
     },
     polygon: {
       url: MAIN_POLYGON_RPC_URL,
@@ -89,7 +90,8 @@ const config = {
       url: TEST_POLYGON_RPC_URL,
       chainId: chainIds.mumbai,
       accounts: [PRIVATE_KEY],
-      gasMultiplier: 1.25
+      gasMultiplier: 1.25,
+      allowUnlimitedContractSize: true,
     },
     bsc: {
       url: MAIN_BSC_RPC_URL,
@@ -156,7 +158,7 @@ const config = {
     apiKey: { 
       // ethereum
       mainnet: ETHERSCAN_KEY,
-      goerli: ETHERSCAN_KEY,
+      sepolia: ETHERSCAN_KEY,
       // polygon
       polygon: POLYGONSCAN_KEY,
       polygonMumbai: POLYGONSCAN_KEY,
