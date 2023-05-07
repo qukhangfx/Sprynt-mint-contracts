@@ -302,4 +302,52 @@ contract DepositFactoryContract is
     function unpause() public virtual onlyRole(DEFAULT_ADMIN_ROLE) {
         _unpause();
     }
+
+    modifier onlyPermissioned() {
+        require(
+            hasRole(DEFAULT_ADMIN_ROLE, msg.sender) ||
+                hasRole(DEPOSIT_ROLE, msg.sender),
+            "Sender does not have the required role"
+        );
+        _;
+    }
+
+    function changeMintPrice(
+        address depositContractAddress,
+        uint256 mintPrice
+    ) public onlyPermissioned {
+        DepositContract(depositContractAddress).changeMintPrice(mintPrice);
+    }
+
+    function changeMinMintQuantity(
+        address depositContractAddress,
+        uint256 minMintQuantity
+    ) public onlyPermissioned {
+        DepositContract(depositContractAddress).changeMinMintQuantity(
+            minMintQuantity
+        );
+    }
+
+    function changeMaxMintQuantity(
+        address depositContractAddress,
+        uint256 maxMintQuantity
+    ) public onlyPermissioned {
+        DepositContract(depositContractAddress).changeMaxMintQuantity(
+            maxMintQuantity
+        );
+    }
+
+    function changeDeadline(
+        address depositContractAddress,
+        uint256 deadline
+    ) public onlyPermissioned {
+        DepositContract(depositContractAddress).changeDeadline(deadline);
+    }
+
+    function changeTotalSupply(
+        address depositContractAddress,
+        uint256 totalSupply
+    ) public onlyPermissioned {
+        DepositContract(depositContractAddress).changeTotalSupply(totalSupply);
+    }
 }
