@@ -48,20 +48,22 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard {
     function mintToken(
         address to,
         uint256 id,
-        uint256 quantity,
         bytes memory data
     ) external onlyRole(FACTORY_CONTRACT_ROLE) nonReentrant {
         require(to != address(0), "Address must not be zero address");
-        _mint(to, id, quantity, data);
+        _mint(to, id, 1, data);
     }
 
     function mintBatchToken(
         address to,
         uint256[] memory ids,
-        uint256[] memory amounts,
         bytes memory data
     ) external onlyRole(FACTORY_CONTRACT_ROLE) nonReentrant {
         require(to != address(0), "Address must not be zero address");
+        uint256[] memory amounts = new uint256[](ids.length);
+        for (uint256 i = 0; i < ids.length; i++) {
+            amounts[i] = 1;
+        }
         _mintBatch(to, ids, amounts, data);
     }
 }

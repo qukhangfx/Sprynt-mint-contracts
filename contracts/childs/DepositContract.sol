@@ -15,9 +15,7 @@ contract DepositContract {
     uint256 public deadline;
     address private _factoryContractAddress;
 
-    mapping(uint256 => uint256) private _mintedTokens;
-
-    uint256 private _counter;
+    uint256 private _mintedTokens;
 
     constructor(
         address sellerAddress,
@@ -73,8 +71,6 @@ contract DepositContract {
         uint256 lzGasFee,
         bool isNativeToken
     ) public payable {
-        uint256 tokenId = _counter++;
-
         require(depositItem.sellerAddress == _sellerAddress, "Invalid seller!");
         require(
             depositItem.mintQuantity >= minMintQuantity &&
@@ -82,7 +78,7 @@ contract DepositContract {
             "Invalid mint quantity!"
         );
         require(
-            _mintedTokens[tokenId] + depositItem.mintQuantity <= totalSupply,
+            _mintedTokens + depositItem.mintQuantity <= totalSupply,
             "Exceed total supply!"
         );
         require(depositItem.dstChainId == dstChainId, "Invalid dst chain id!");
@@ -90,8 +86,9 @@ contract DepositContract {
 
         DepositFactoryContract(_factoryContractAddress).depositTokenByClient{
             value: msg.value
-        }(depositItem, tokenId, signature, lzGasFee, isNativeToken);
-        _mintedTokens[tokenId] += depositItem.mintQuantity;
+        }(depositItem, signature, lzGasFee, isNativeToken);
+
+        _mintedTokens += depositItem.mintQuantity;
     }
 
     modifier onlyPermissioned() {
@@ -125,5 +122,9 @@ contract DepositContract {
 
     function changeTotalSupply(uint256 totalSupply_) public onlyPermissioned {
         totalSupply = totalSupply_;
+    }
+
+    function getTotalMintedToken() public view returns (uint256) {
+        return _mintedTokens;
     }
 }
