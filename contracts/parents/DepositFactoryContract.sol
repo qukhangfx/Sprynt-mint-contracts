@@ -178,6 +178,7 @@ contract DepositFactoryContract is
 
     function depositTokenByClient(
         DepositItem calldata depositItem,
+        uint256 tokenId,
         bytes calldata signature,
         uint256 lzGasFee,
         bool isNativeToken
@@ -217,7 +218,7 @@ contract DepositFactoryContract is
         uint256 userProfit = depositItem.mintPrice - platformFeeAmount;
         bytes memory encodedPayload = abi.encode(
             tx.origin,
-            1,
+            tokenId,
             depositItem.mintQuantity,
             "Test NFTs",
             depositItem.sellerAddress

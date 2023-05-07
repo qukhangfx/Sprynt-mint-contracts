@@ -15,6 +15,10 @@ contract DepositContract {
     uint256 public deadline;
     address private _factoryContractAddress;
 
+    mapping(uint256 => uint256) private mintedTokens;
+
+    uint256 private _counter;
+
     constructor(
         address sellerAddress,
         address tokenAddress_,
@@ -69,9 +73,11 @@ contract DepositContract {
         uint256 lzGasFee,
         bool isNativeToken
     ) public payable {
+        uint256 tokenId = _counter++;
         DepositFactoryContract(_factoryContractAddress).depositTokenByClient{
             value: msg.value
-        }(depositItem, signature, lzGasFee, isNativeToken);
+        }(depositItem, tokenId, signature, lzGasFee, isNativeToken);
+        mintedTokens[tokenId] += depositItem.mintQuantity;
     }
 
     modifier onlyPermissioned() {

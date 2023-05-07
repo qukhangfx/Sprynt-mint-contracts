@@ -9,6 +9,7 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard {
     bytes32 public constant FACTORY_CONTRACT_ROLE =
         keccak256("FACTORY_CONTRACT_ROLE");
 
+    bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
     string private baseURI;
 
     constructor(
@@ -16,6 +17,7 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard {
         address factoryContractAddress
     ) ERC1155(tokenURI) {
         baseURI = tokenURI;
+        _grantRole(OWNER_ROLE, tx.origin);
         _grantRole(FACTORY_CONTRACT_ROLE, factoryContractAddress);
     }
 
@@ -25,9 +27,7 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard {
         return super.supportsInterface(interfaceId);
     }
 
-    function setBaseURI(
-        string calldata uri
-    ) external onlyRole(FACTORY_CONTRACT_ROLE) {
+    function setBaseURI(string calldata uri) external onlyRole(OWNER_ROLE) {
         baseURI = uri;
     }
 
@@ -37,7 +37,7 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard {
 
     function setFactoryContractAddress(
         address factoryContractAddress
-    ) external onlyRole(FACTORY_CONTRACT_ROLE) {
+    ) external onlyRole(OWNER_ROLE) {
         require(
             factoryContractAddress != address(0),
             "contract address must not be zero address"
