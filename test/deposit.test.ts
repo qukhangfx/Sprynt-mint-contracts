@@ -239,7 +239,7 @@ describe("Test multichain minting engine", () => {
 
       const depositItemData = {
         mintPrice: getBigNumber(1000, depositTokenDecimals),
-        mintQuantity: 10,
+        mintQuantity: 2,
         sellerAddress: sellerWalletAddress,
         dstChainId: chainIdDst,
         isMintAvailable: true,
@@ -260,12 +260,11 @@ describe("Test multichain minting engine", () => {
       );
 
       const _payload = ethers.utils.defaultAbiCoder.encode(
-        ["address", "uint256", "uint256", "string", "address"],
+        ["address", "uint256", "bytes", "address"],
         [
           clientWalletAddress,
-          1,
           depositItemData.mintQuantity,
-          "Test NFTs",
+          Buffer.from(""),
           depositItemData.sellerAddress,
         ]
       );
@@ -340,8 +339,11 @@ describe("Test multichain minting engine", () => {
         )
       ).to.be.equal("975.0");
 
-      const nftBalance = await NftContract.balanceOf(clientWalletAddress, 1);
-      console.log(`client has ${nftBalance} NFTs`);
+      expect(await depositContract.getTotalMintedToken()).to.be.equal(2);
+      expect(await receiveFactoryContract.getTotalMintedToken()).to.be.equal(2);
+      expect(
+        await NftContract.getNumberOfMintedTokens(clientWalletAddress)
+      ).to.be.equal(2);
     });
   });
 });

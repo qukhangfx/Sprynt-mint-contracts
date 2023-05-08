@@ -1,13 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 import "@layerzerolabs/solidity-examples/contracts/lzApp/NonblockingLzApp.sol";
-import "@layerzerolabs/solidity-examples/contracts/util/BytesLib.sol";
 import "../childs/ERC1155.sol";
-import "hardhat/console.sol";
 
 contract ReceiveFactoryContract is NonblockingLzApp {
-    using BytesLib for bytes;
-
     uint256 private _mintedTokens;
 
     event CreatedNftContract(
@@ -51,24 +47,22 @@ contract ReceiveFactoryContract is NonblockingLzApp {
         (
             address clientAddress,
             uint256 mintQuantity,
-            string memory data,
+            bytes memory data,
             address seller
-        ) = abi.decode(_payload, (address, uint256, string, address));
+        ) = abi.decode(_payload, (address, uint256, bytes, address));
         address nftContractAddress = nftContracts[seller];
         require(nftContractAddress != address(0), "NftContract is not created");
 
         uint256[] memory ids = new uint256[](mintQuantity);
-        for (uint i = 1; i <= ids.length; i++) {
-            ids[i] = _mintedTokens + i;
+        for (uint256 i = 0; i < mintQuantity; i++) {
+            ids[i] = ++_mintedTokens;
         }
 
         ERC1155Contract(nftContractAddress).mintBatchToken(
             clientAddress,
             ids,
-            bytes(data)
+            data
         );
-
-        _mintedTokens += mintQuantity;
 
         emit MintedNfts(
             nftContractAddress,

@@ -12,6 +12,8 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard {
     bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
     string private baseURI;
 
+    mapping(address => uint256) private _mintedTokens;
+
     constructor(
         string memory tokenURI,
         address factoryContractAddress
@@ -64,6 +66,14 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard {
         for (uint256 i = 0; i < ids.length; i++) {
             amounts[i] = 1;
         }
+
         _mintBatch(to, ids, amounts, data);
+        _mintedTokens[to] += ids.length;
+    }
+
+    function getNumberOfMintedTokens(
+        address account
+    ) external view returns (uint256) {
+        return _mintedTokens[account];
     }
 }

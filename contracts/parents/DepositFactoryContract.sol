@@ -218,7 +218,7 @@ contract DepositFactoryContract is
         bytes memory encodedPayload = abi.encode(
             tx.origin,
             depositItem.mintQuantity,
-            "",
+            bytes(""),
             depositItem.sellerAddress
         );
 
