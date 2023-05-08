@@ -4,7 +4,6 @@ import "@layerzerolabs/solidity-examples/contracts/lzApp/NonblockingLzApp.sol";
 import "../childs/ERC1155.sol";
 
 contract ReceiveFactoryContract is NonblockingLzApp {
-    uint256 private _mintedTokens;
 
     event CreatedNftContract(
         string tokenUri,
@@ -53,14 +52,9 @@ contract ReceiveFactoryContract is NonblockingLzApp {
         address nftContractAddress = nftContracts[seller];
         require(nftContractAddress != address(0), "NftContract is not created");
 
-        uint256[] memory ids = new uint256[](mintQuantity);
-        for (uint256 i = 0; i < mintQuantity; i++) {
-            ids[i] = ++_mintedTokens;
-        }
-
         ERC1155Contract(nftContractAddress).mintBatchToken(
             clientAddress,
-            ids,
+            mintQuantity,
             data
         );
 
@@ -76,9 +70,5 @@ contract ReceiveFactoryContract is NonblockingLzApp {
         address owner
     ) public view returns (address) {
         return nftContracts[owner];
-    }
-
-    function getTotalMintedToken() public view returns (uint256) {
-        return _mintedTokens;
     }
 }

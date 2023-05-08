@@ -148,6 +148,12 @@ contract DepositFactoryContract is
         _grantRole(DEPOSIT_ROLE, account);
     }
 
+    function revokeDepositRole(
+        address account
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _revokeRole(DEPOSIT_ROLE, account);
+    }
+
     function setAdminWallet(
         address adminWallet_
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -189,7 +195,8 @@ contract DepositFactoryContract is
         require(depositItem.isMintAvailable, "Mint is not available");
         if (isNativeToken) {
             require(
-                msg.value >= lzGasFee + depositItem.mintPrice,
+                msg.value >=
+                    lzGasFee + depositItem.mintPrice * depositItem.mintQuantity,
                 "Insufficient native token balances"
             );
         } else {

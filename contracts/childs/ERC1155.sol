@@ -12,7 +12,7 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard {
     bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
     string private baseURI;
 
-    mapping(address => uint256) private _mintedTokens;
+    uint256 private _mintedTokens;
 
     constructor(
         string memory tokenURI,
@@ -58,22 +58,20 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard {
 
     function mintBatchToken(
         address to,
-        uint256[] memory ids,
+        uint256 quantity,
         bytes memory data
     ) external onlyRole(FACTORY_CONTRACT_ROLE) nonReentrant {
         require(to != address(0), "Address must not be zero address");
-        uint256[] memory amounts = new uint256[](ids.length);
+        uint256[] memory amounts = new uint256[](quantity);
+        uint256[] memory ids = new uint256[](quantity);
         for (uint256 i = 0; i < ids.length; i++) {
+            ids[i] = ++_mintedTokens;
             amounts[i] = 1;
         }
-
         _mintBatch(to, ids, amounts, data);
-        _mintedTokens[to] += ids.length;
     }
 
-    function getNumberOfMintedTokens(
-        address account
-    ) external view returns (uint256) {
-        return _mintedTokens[account];
+    function getNumberOfMintedTokens() external view returns (uint256) {
+        return _mintedTokens;
     }
 }
