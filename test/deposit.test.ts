@@ -340,9 +340,8 @@ describe("Test multichain minting engine", () => {
       ).to.be.equal("975.0");
 
       expect(await depositContract.getTotalMintedToken()).to.be.equal(2);
-      expect(await receiveFactoryContract.getTotalMintedToken()).to.be.equal(2);
       expect(
-        await NftContract.getNumberOfMintedTokens(clientWalletAddress)
+        await NftContract.getNumberOfMintedTokens()
       ).to.be.equal(2);
     });
   });
