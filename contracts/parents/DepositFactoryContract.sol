@@ -29,15 +29,8 @@ contract DepositFactoryContract is
 {
     using SafeERC20 for IERC20;
 
-    event SetAdminWallet(address adminWallet);
-    event SetPlatformFee(uint96 platformFee);
-    event DepositedToken(
-        DepositItem depositItem,
-        uint256 lzGasFee,
-        bool isNativeToken
-    );
-
     bytes32 public constant DEPOSIT_ROLE = keccak256("DEPOSIT_ROLE");
+    bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
 
     uint96 public platformFee = 250; // 2.5% platform fee
     address private _adminWallet;
@@ -48,7 +41,17 @@ contract DepositFactoryContract is
 
     mapping(address => bool) private _depositContracts;
 
+    address[] private _depositContractsList;
+
+    event SetAdminWallet(address adminWallet);
+    event SetPlatformFee(uint96 platformFee);
+    event DepositedToken(
+        DepositItem depositItem,
+        uint256 lzGasFee,
+        bool isNativeToken
+    );
     event MasterDepositContractCreated(address masterDepositContractAddress);
+    event DepositContractCreated(address depositContractAddress);
 
     constructor(
         address _layerZeroEndpoint,
@@ -66,29 +69,50 @@ contract DepositFactoryContract is
         );
         _acceptToken = acceptToken;
         _adminWallet = adminWallet;
-        _setupRole(DEFAULT_ADMIN_ROLE, owner);
+        _setupRole(OWNER_ROLE, owner);
         _setupRole(DEPOSIT_ROLE, depositRoleAccount);
     }
 
     function setMasterDepositContractAddress(
         address masterDepositContract
-    ) public onlyOwner {
+    ) public onlyRole(OWNER_ROLE) {
         _masterDepositContract = masterDepositContract;
     }
 
-    function createNewDepositContract(
-        address sellerAddress,
-        address tokenAddress,
-        uint256 dstChainId,
-        uint256 mintPrice,
-        uint256 whiteListMintPrice,
-        uint256 minMintQuantity,
-        uint256 maxMintQuantity,
-        uint256 totalSupply,
-        uint256 deadline
-    ) public onlyOwner {
-        address masterDepositContractAddress = address(
-            new DepositContract(
+    function _nonblockingLzReceive(
+        uint16,
+        bytes memory,
+        uint64,
+        bytes memory _payload
+    ) internal override {
+        (
+            address sellerAddress,
+            address tokenAddress,
+            uint16 dstChainId,
+            uint256 mintPrice,
+            uint256 whiteListMintPrice,
+            uint256 minMintQuantity,
+            uint256 maxMintQuantity,
+            uint256 totalSupply,
+            uint256 deadline
+        ) = abi.decode(
+                _payload,
+                (
+                    address,
+                    address,
+                    uint16,
+                    uint256,
+                    uint256,
+                    uint256,
+                    uint256,
+                    uint256,
+                    uint256
+                )
+            );
+
+        if (_masterDepositContract != address(0)) {
+            address clone = createClone(_masterDepositContract);
+            DepositContract(clone).init(
                 sellerAddress,
                 tokenAddress,
                 dstChainId,
@@ -99,38 +123,36 @@ contract DepositFactoryContract is
                 totalSupply,
                 deadline,
                 address(this)
-            )
-        );
-        _depositContracts[masterDepositContractAddress] = true;
-        setMasterDepositContractAddress(masterDepositContractAddress);
-        emit MasterDepositContractCreated(masterDepositContractAddress);
+            );
+            _depositContracts[clone] = true;
+            _depositContractsList.push(clone);
+            emit DepositContractCreated(clone);
+        } else {
+            address masterDepositContractAddress = address(
+                new DepositContract(
+                    sellerAddress,
+                    tokenAddress,
+                    dstChainId,
+                    mintPrice,
+                    whiteListMintPrice,
+                    minMintQuantity,
+                    maxMintQuantity,
+                    totalSupply,
+                    deadline,
+                    address(this)
+                )
+            );
+
+            _depositContracts[masterDepositContractAddress] = true;
+            _masterDepositContract = masterDepositContractAddress;
+            _depositContractsList.push(masterDepositContractAddress);
+            emit MasterDepositContractCreated(masterDepositContractAddress);
+        }
     }
 
-    function deployClonedDepositContract(
-        address sellerAddress,
-        address tokenAddress,
-        uint256 dstChainId,
-        uint256 mintPrice,
-        uint256 whiteListMintPrice,
-        uint256 minMintQuantity,
-        uint256 maxMintQuantity,
-        uint256 totalSupply,
-        uint256 deadline
-    ) public onlyOwner {
-        address clone = createClone(_masterDepositContract);
-        DepositContract(clone).init(
-            sellerAddress,
-            tokenAddress,
-            dstChainId,
-            mintPrice,
-            whiteListMintPrice,
-            minMintQuantity,
-            maxMintQuantity,
-            totalSupply,
-            deadline,
-            address(this)
-        );
-        _depositContracts[clone] = true;
+    function getLatestDepositContract() external view returns (address) {
+        require(_depositContractsList.length > 0, "No items in the mapping");
+        return _depositContractsList[_depositContractsList.length - 1];
     }
 
     function supportsInterface(
@@ -142,21 +164,17 @@ contract DepositFactoryContract is
     /**
   @dev Setup deposit role
   */
-    function setupDepositRole(
-        address account
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setupDepositRole(address account) external onlyRole(OWNER_ROLE) {
         _grantRole(DEPOSIT_ROLE, account);
     }
 
-    function revokeDepositRole(
-        address account
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function revokeDepositRole(address account) external onlyRole(OWNER_ROLE) {
         _revokeRole(DEPOSIT_ROLE, account);
     }
 
     function setAdminWallet(
         address adminWallet_
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    ) external onlyRole(OWNER_ROLE) {
         require(
             adminWallet_ != address(0),
             "adminWallet address must not be zero address"
@@ -165,9 +183,7 @@ contract DepositFactoryContract is
         emit SetAdminWallet(adminWallet_);
     }
 
-    function setPlatformFee(
-        uint96 platformFee_
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setPlatformFee(uint96 platformFee_) external onlyRole(OWNER_ROLE) {
         require(platformFee_ > 0, "platformFee must be greater than zero");
         require(platformFee_ < 10000, "platformFee must be less than 100%");
         platformFee = platformFee_;
@@ -186,7 +202,8 @@ contract DepositFactoryContract is
         DepositItem calldata depositItem,
         bytes calldata signature,
         uint256 lzGasFee,
-        bool isNativeToken
+        bool isNativeToken,
+        bytes calldata adapterParams
     ) external payable nonReentrant whenNotPaused onlyContract {
         require(
             block.timestamp <= depositItem.deadline,
@@ -234,7 +251,7 @@ contract DepositFactoryContract is
             encodedPayload,
             payable(tx.origin),
             address(0x0),
-            bytes(""),
+            adapterParams,
             lzGasFee
         );
 
@@ -260,12 +277,14 @@ contract DepositFactoryContract is
     function estimateFee(
         uint16 dstChainId_,
         bool _useZro,
-        bytes calldata _adapterParams
+        bytes calldata _adapterParams,
+        DepositItem calldata depositItem
     ) public view returns (uint nativeFee, uint zroFee) {
         bytes memory encodedPayload = abi.encode(
-            address(0),
-            uint256(0),
-            address(0)
+            tx.origin,
+            depositItem.mintQuantity,
+            bytes(""),
+            depositItem.sellerAddress
         );
         return
             lzEndpoint.estimateFees(
@@ -276,13 +295,6 @@ contract DepositFactoryContract is
                 _adapterParams
             );
     }
-
-    function _nonblockingLzReceive(
-        uint16,
-        bytes memory,
-        uint64,
-        bytes memory
-    ) internal override {}
 
     function _calcFeeAmount(
         uint256 amount,
@@ -310,7 +322,7 @@ contract DepositFactoryContract is
 
     modifier onlyPermissioned() {
         require(
-            hasRole(DEFAULT_ADMIN_ROLE, msg.sender) ||
+            hasRole(OWNER_ROLE, msg.sender) ||
                 hasRole(DEPOSIT_ROLE, msg.sender),
             "Sender does not have the required role"
         );

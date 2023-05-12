@@ -69,7 +69,8 @@ contract DepositContract {
         DepositItem calldata depositItem,
         bytes calldata signature,
         uint256 lzGasFee,
-        bool isNativeToken
+        bool isNativeToken,
+        bytes calldata adapterParams
     ) public payable {
         require(depositItem.sellerAddress == _sellerAddress, "Invalid seller!");
         require(
@@ -86,7 +87,7 @@ contract DepositContract {
 
         DepositFactoryContract(_factoryContractAddress).depositTokenByClient{
             value: msg.value
-        }(depositItem, signature, lzGasFee, isNativeToken);
+        }(depositItem, signature, lzGasFee, isNativeToken, adapterParams);
 
         _mintedTokens += depositItem.mintQuantity;
     }

@@ -14,7 +14,7 @@ dotenv.config();
 const chainIds = {
   // ethereum
   mainnet: 1,
-  goerli: 5,
+  sepolia: 11155111,
   ropsten: 3,
   // polygon
   mumbai: 80001,
@@ -37,6 +37,7 @@ const chainIds = {
 };
 
 const PRIVATE_KEY = process.env.PK || "";
+const DEPOSIT_PRIVATE_KEY = process.env.DEPOSIT_ROLE_PK || "";
 
 const ETHERSCAN_KEY = process.env.ETHERSCAN_KEY || "";
 const POLYGONSCAN_KEY = process.env.POLYGONSCAN_KEY || "";
@@ -65,7 +66,7 @@ const config = {
   defaultNetwork: "hardhat",
   networks: {
     hardhat: {
-      // chainId: 1337
+      blockGasLimit: 200_000_000,
     },
     mainnet: {
       url: MAIN_ETH_RPC_URL,
@@ -73,11 +74,12 @@ const config = {
       accounts: [PRIVATE_KEY],
       gasMultiplier: 1.25,
     },
-    goerli: {
+    sepolia: {
       url: TEST_ETH_RPC_URL,
-      chainId: chainIds.goerli,
-      accounts: [PRIVATE_KEY],
+      chainId: chainIds.sepolia,
+      accounts: [PRIVATE_KEY, DEPOSIT_PRIVATE_KEY],
       gasMultiplier: 1.25,
+      allowUnlimitedContractSize: true,
     },
     polygon: {
       url: MAIN_POLYGON_RPC_URL,
@@ -88,8 +90,9 @@ const config = {
     polygonMumbai: {
       url: TEST_POLYGON_RPC_URL,
       chainId: chainIds.mumbai,
-      accounts: [PRIVATE_KEY],
+      accounts: [PRIVATE_KEY, DEPOSIT_PRIVATE_KEY],
       gasMultiplier: 1.25,
+      allowUnlimitedContractSize: true,
     },
     bsc: {
       url: MAIN_BSC_RPC_URL,
@@ -156,7 +159,7 @@ const config = {
     apiKey: {
       // ethereum
       mainnet: ETHERSCAN_KEY,
-      goerli: ETHERSCAN_KEY,
+      sepolia: ETHERSCAN_KEY,
       // polygon
       polygon: POLYGONSCAN_KEY,
       polygonMumbai: POLYGONSCAN_KEY,
