@@ -66,7 +66,7 @@ const config = {
   defaultNetwork: "hardhat",
   networks: {
     hardhat: {
-      blockGasLimit: 200_000_000,
+      // blockGasLimit: 200_000_000,
     },
     mainnet: {
       url: MAIN_ETH_RPC_URL,

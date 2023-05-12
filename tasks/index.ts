@@ -32,7 +32,7 @@ task(
   .addParam(
     "mchain",
     "child chain of ReceiveFactoryContract for NFT mint",
-    "polygonMumbai"
+    "sepolia"
   )
   .addParam("e", "testnet or mainnet", "testnet");
 

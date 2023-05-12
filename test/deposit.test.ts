@@ -392,6 +392,9 @@ describe("Test multichain minting engine", () => {
             }
           )
       ).wait();
+      
+      console.log("Sent Estimated Fee for Deposit", estimatedFeeDeposit.nativeFee);
+      // console.log(depositContractCreation);
 
       const masterDepositContractAddress =
         await depositFactoryContract.getLatestDepositContract();
@@ -403,7 +406,7 @@ describe("Test multichain minting engine", () => {
         masterDepositContractAddress
       )) as DepositContract;
 
-      const mintQuant = 10;
+      const mintQuant = 30;
 
       const depositItemData = {
         mintPrice: getBigNumber(1, depositTokenDecimals),
@@ -486,6 +489,8 @@ describe("Test multichain minting engine", () => {
             }
           )
       ).to.be.not.reverted;
+      
+      console.log(estimatedFee.nativeFee);
 
       console.log(
         "admin wallet balance is: ",

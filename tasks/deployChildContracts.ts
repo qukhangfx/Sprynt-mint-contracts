@@ -15,7 +15,7 @@ const tokenURI =
 export const deployChildContractsBySeller = async (taskArgs: any, hre: any) => {
   const mintChain: string = taskArgs.mchain;
 
-  const MINT_CHAIN_RPC_URL = process.env.TEST_POLYGON_RPC_URL || "";
+  const MINT_CHAIN_RPC_URL = process.env.TEST_ETH_RPC_URL || "";
 
   const sellerAddress = process.env.SELLER_ADDRESS || "";
   const sellerPk = process.env.SELLER_PK || "";
@@ -50,31 +50,31 @@ export const deployChildContractsBySeller = async (taskArgs: any, hre: any) => {
       receiveFactoryContractAddress
     )) as ReceiveFactoryContract;
 
-    // console.log(`Creating ERC1155NFTsContract to ${mintChain}`);
+    console.log(`Creating ERC1155NFTsContract to ${mintChain}`);
 
-    // const txResult = await (
-    //   await receiveFactoryContract
-    //     .connect(seller)
-    //     .createNftContractBySeller(tokenURI)
-    // ).wait();
+    const txResult = await (
+      await receiveFactoryContract
+        .connect(seller)
+        .createNftContractBySeller(tokenURI)
+    ).wait();
 
-    // if (txResult.status == 1) {
-    //   const events = txResult.events;
-    //   if (events && events.length) {
-    //     for (const eventObject of events) {
-    //       if (eventObject.event == "CreatedNftContract") {
-    //         const nftContractAddress = eventObject.args["nftContractAddress"];
-    //         nftMintContractsData[mintChain] = {
-    //           nftContract: nftContractAddress,
-    //           factoryContract: receiveFactoryContractAddress,
-    //           tokenURI,
-    //         };
-    //         console.log(`NftContract is deployed at: ${nftContractAddress}`);
-    //         break;
-    //       }
-    //     }
-    //   }
-    // }
+    if (txResult.status == 1) {
+      const events = txResult.events;
+      if (events && events.length) {
+        for (const eventObject of events) {
+          if (eventObject.event == "CreatedNftContract") {
+            const nftContractAddress = eventObject.args["nftContractAddress"];
+            nftMintContractsData[mintChain] = {
+              nftContract: nftContractAddress,
+              factoryContract: receiveFactoryContractAddress,
+              tokenURI,
+            };
+            console.log(`NftContract is deployed at: ${nftContractAddress}`);
+            break;
+          }
+        }
+      }
+    }
 
     for (const depositChain of depositChains) {
       if (hre.network.name !== mintChain) {
@@ -146,28 +146,28 @@ export const deployChildContractsBySeller = async (taskArgs: any, hre: any) => {
 
       console.log(depositContractCreation);
 
-      // if (hre.network.name !== depositChain) {
-      //   await hre.changeNetwork(depositChain);
-      //   console.log(`Deployer: switched on ${depositChain}`);
-      // }
+      if (hre.network.name !== depositChain) {
+        await hre.changeNetwork(depositChain);
+        console.log(`Deployer: switched on ${depositChain}`);
+      }
 
-      // let depositFactoryContractAddress =
-      //   depositFactoryContractData[depositChain];
+      let depositFactoryContractAddress =
+        depositFactoryContractData[depositChain];
 
-      // let depositFactoryContract = (await hre.ethers.getContractAt(
-      //   "DepositFactoryContract",
-      //   depositFactoryContractAddress
-      // )) as DepositFactoryContract;
+      let depositFactoryContract = (await hre.ethers.getContractAt(
+        "DepositFactoryContract",
+        depositFactoryContractAddress
+      )) as DepositFactoryContract;
 
-      // let depositContractAddress =
-      //   await depositFactoryContract.getLatestDepositContract();
+      let depositContractAddress =
+        await depositFactoryContract.getLatestDepositContract();
 
-      // console.log(
-      //   `depositContractAddress on ${depositChain} is: `,
-      //   depositContractAddress
-      // );
+      console.log(
+        `depositContractAddress on ${depositChain} is: `,
+        depositContractAddress
+      );
 
-      // depositContractData[depositChain] = depositContractAddress;
+      depositContractData[depositChain] = depositContractAddress;
     }
   } catch (e) {
     console.log(e);
