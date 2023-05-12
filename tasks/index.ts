@@ -16,7 +16,7 @@ task(
   "verifyMain",
   "verify main factory contracts by admin",
   verifyMainContractsByAdmin
-);
+).addParam("e", "testnet or mainnet", "testnet");
 
 task(
   "setTrustRemote",
@@ -28,11 +28,13 @@ task(
   "deployChild",
   "deploy child contracts by seller",
   deployChildContractsBySeller
-).addParam(
-  "mchain",
-  "child chain of ReceiveFactoryContract for NFT mint",
-  "polygonMumbai"
-);
+)
+  .addParam(
+    "mchain",
+    "child chain of ReceiveFactoryContract for NFT mint",
+    "sepolia"
+  )
+  .addParam("e", "testnet or mainnet", "testnet");
 
 task(
   "verifyChild",

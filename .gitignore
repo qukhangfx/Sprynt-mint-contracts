@@ -18,3 +18,7 @@ yarn-error.log*
 
 .env
 coverage.json
+
+artifacts/
+package-lock.json
+yarn.lock

@@ -1,10 +1,10 @@
-import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers';
-import { BigNumberish, Contract } from 'ethers';
-import { parseUnits } from 'ethers/lib/utils'
-const { BigNumber } = require('ethers')
+import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
+import { BigNumberish, Contract } from "ethers";
+import { parseUnits } from "ethers/lib/utils";
+const { BigNumber } = require("ethers");
 
 // Defaults to e18 using amount * 10^18
-export function getBigNumber(amount:number | string, decimals = 18) {
+export function getBigNumber(amount: number | string, decimals = 18) {
   return parseUnits(amount.toString(), decimals);
 }
 
@@ -19,16 +19,16 @@ const DEPOSIT_ITEM_DATA_TYPE = {
     { name: "isMintAvailable", type: "bool" },
     { name: "nonce", type: "uint256" },
     { name: "deadline", type: "uint256" },
-  ]
+  ],
 };
 
 export type DepositItemData = {
-  mintPrice: BigNumberish,
-  mintQuantity: BigNumberish,
-  sellerAddress: BigNumberish,
-  dstChainId: BigNumberish,
-  isMintAvailable: Boolean,
-  deadline: BigNumberish,
+  mintPrice: BigNumberish;
+  mintQuantity: BigNumberish;
+  sellerAddress: BigNumberish;
+  dstChainId: BigNumberish;
+  isMintAvailable: Boolean;
+  deadline: BigNumberish;
 };
 
 export async function signDepositItemData(
