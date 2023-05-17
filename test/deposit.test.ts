@@ -392,8 +392,11 @@ describe("Test multichain minting engine", () => {
             }
           )
       ).wait();
-      
-      console.log("Sent Estimated Fee for Deposit", estimatedFeeDeposit.nativeFee);
+
+      console.log(
+        "Sent Estimated Fee for Deposit",
+        estimatedFeeDeposit.nativeFee
+      );
       // console.log(depositContractCreation);
 
       const masterDepositContractAddress =
@@ -489,7 +492,7 @@ describe("Test multichain minting engine", () => {
             }
           )
       ).to.be.not.reverted;
-      
+
       console.log(estimatedFee.nativeFee);
 
       console.log(

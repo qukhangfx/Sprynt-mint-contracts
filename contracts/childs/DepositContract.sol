@@ -125,6 +125,12 @@ contract DepositContract {
         totalSupply = totalSupply_;
     }
 
+    function changeWhiteListMintPrice(
+        uint256 whiteListMintPrice_
+    ) public onlyPermissioned {
+        whiteListMintPrice = whiteListMintPrice_;
+    }
+
     function getTotalMintedToken() public view returns (uint256) {
         return _mintedTokens;
     }

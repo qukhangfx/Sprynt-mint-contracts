@@ -41,6 +41,9 @@ contract DepositFactoryContract is
 
     mapping(address => bool) private _depositContracts;
 
+    mapping(uint16 => mapping(address => address))
+        public deployedDepositContracts;
+
     address[] private _depositContractsList;
 
     event SetAdminWallet(address adminWallet);
@@ -52,6 +55,15 @@ contract DepositFactoryContract is
     );
     event MasterDepositContractCreated(address masterDepositContractAddress);
     event DepositContractCreated(address depositContractAddress);
+    event DepositContractUpdated(
+        address depositContractAddress,
+        uint256 mintPrice,
+        uint256 whiteListMintPrice,
+        uint256 minMintQuantity,
+        uint256 maxMintQuantity,
+        uint256 totalSupply,
+        uint256 deadline
+    );
 
     constructor(
         address _layerZeroEndpoint,
@@ -110,26 +122,48 @@ contract DepositFactoryContract is
                 )
             );
 
-        if (_masterDepositContract != address(0)) {
-            address clone = createClone(_masterDepositContract);
-            DepositContract(clone).init(
-                sellerAddress,
-                tokenAddress,
-                dstChainId,
+        if (deployedDepositContracts[dstChainId][sellerAddress] != address(0)) {
+            address depositContractAddress = deployedDepositContracts[
+                dstChainId
+            ][sellerAddress];
+
+            DepositContract depositContract = DepositContract(
+                depositContractAddress
+            );
+            if (depositContract.mintPrice() != mintPrice) {
+                changeMintPrice(depositContractAddress, mintPrice);
+            }
+            if (depositContract.whiteListMintPrice() != whiteListMintPrice) {
+                changeWhiteListMintPrice(
+                    depositContractAddress,
+                    whiteListMintPrice
+                );
+            }
+            if (depositContract.minMintQuantity() != minMintQuantity) {
+                changeMinMintQuantity(depositContractAddress, minMintQuantity);
+            }
+            if (depositContract.maxMintQuantity() != maxMintQuantity) {
+                changeMaxMintQuantity(depositContractAddress, maxMintQuantity);
+            }
+            if (depositContract.totalSupply() != totalSupply) {
+                changeTotalSupply(depositContractAddress, totalSupply);
+            }
+            if (depositContract.deadline() != deadline) {
+                changeDeadline(depositContractAddress, deadline);
+            }
+            emit DepositContractUpdated(
+                address(depositContract),
                 mintPrice,
                 whiteListMintPrice,
                 minMintQuantity,
                 maxMintQuantity,
                 totalSupply,
-                deadline,
-                address(this)
+                deadline
             );
-            _depositContracts[clone] = true;
-            _depositContractsList.push(clone);
-            emit DepositContractCreated(clone);
         } else {
-            address masterDepositContractAddress = address(
-                new DepositContract(
+            if (_masterDepositContract != address(0)) {
+                address clone = createClone(_masterDepositContract);
+                DepositContract(clone).init(
                     sellerAddress,
                     tokenAddress,
                     dstChainId,
@@ -140,13 +174,35 @@ contract DepositFactoryContract is
                     totalSupply,
                     deadline,
                     address(this)
-                )
-            );
+                );
+                _depositContracts[clone] = true;
+                _depositContractsList.push(clone);
+                deployedDepositContracts[dstChainId][sellerAddress] = clone;
+                emit DepositContractCreated(clone);
+            } else {
+                address masterDepositContractAddress = address(
+                    new DepositContract(
+                        sellerAddress,
+                        tokenAddress,
+                        dstChainId,
+                        mintPrice,
+                        whiteListMintPrice,
+                        minMintQuantity,
+                        maxMintQuantity,
+                        totalSupply,
+                        deadline,
+                        address(this)
+                    )
+                );
 
-            _depositContracts[masterDepositContractAddress] = true;
-            _masterDepositContract = masterDepositContractAddress;
-            _depositContractsList.push(masterDepositContractAddress);
-            emit MasterDepositContractCreated(masterDepositContractAddress);
+                _depositContracts[masterDepositContractAddress] = true;
+                _masterDepositContract = masterDepositContractAddress;
+                _depositContractsList.push(masterDepositContractAddress);
+                deployedDepositContracts[dstChainId][
+                    sellerAddress
+                ] = masterDepositContractAddress;
+                emit MasterDepositContractCreated(masterDepositContractAddress);
+            }
         }
     }
 
@@ -336,6 +392,15 @@ contract DepositFactoryContract is
         DepositContract(depositContractAddress).changeMintPrice(mintPrice);
     }
 
+    function changeWhiteListMintPrice(
+        address depositContractAddress,
+        uint256 whiteListMintPrice
+    ) public onlyPermissioned {
+        DepositContract(depositContractAddress).changeWhiteListMintPrice(
+            whiteListMintPrice
+        );
+    }
+
     function changeMinMintQuantity(
         address depositContractAddress,
         uint256 minMintQuantity
@@ -366,5 +431,12 @@ contract DepositFactoryContract is
         uint256 totalSupply
     ) public onlyPermissioned {
         DepositContract(depositContractAddress).changeTotalSupply(totalSupply);
+    }
+
+    function getDepositContract(
+        uint16 dstChainId,
+        address seller
+    ) public view returns (address) {
+        return deployedDepositContracts[dstChainId][seller];
     }
 }
