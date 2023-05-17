@@ -17,6 +17,8 @@ contract DepositContract {
 
     uint256 private _mintedTokens;
 
+    mapping(address => bool) public whiteList;
+
     constructor(
         address sellerAddress,
         address tokenAddress_,
@@ -133,5 +135,13 @@ contract DepositContract {
 
     function getTotalMintedToken() public view returns (uint256) {
         return _mintedTokens;
+    }
+
+    function addWhiteList(address whiteListItem) public onlyPermissioned {
+        whiteList[whiteListItem] = true;
+    }
+
+    function removeWhiteList(address whiteListItem) public onlyPermissioned {
+        whiteList[whiteListItem] = false;
     }
 }
