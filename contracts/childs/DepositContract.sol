@@ -133,6 +133,7 @@ contract DepositContract {
     }
 
     function changeTotalSupply(uint256 totalSupply_) public onlyPermissioned {
+        require(totalSupply_ >= _mintedTokens, "Invalid total supply!");
         totalSupply = totalSupply_;
     }
 
