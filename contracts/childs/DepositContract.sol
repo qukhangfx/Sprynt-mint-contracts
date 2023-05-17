@@ -87,6 +87,15 @@ contract DepositContract {
         require(depositItem.dstChainId == dstChainId, "Invalid dst chain id!");
         require(depositItem.deadline <= deadline, "Invalid deadline!");
 
+        if (whiteList[msg.sender]) {
+            require(
+                depositItem.mintPrice == whiteListMintPrice,
+                "Invalid mint price!"
+            );
+        } else {
+            require(depositItem.mintPrice == mintPrice, "Invalid mint price!");
+        }
+
         DepositFactoryContract(_factoryContractAddress).depositTokenByClient{
             value: msg.value
         }(depositItem, signature, lzGasFee, isNativeToken, adapterParams);
@@ -137,11 +146,11 @@ contract DepositContract {
         return _mintedTokens;
     }
 
-    function addWhiteList(address whiteListItem) public onlyPermissioned {
-        whiteList[whiteListItem] = true;
+    function addWhiteList(address buyer) public onlyPermissioned {
+        whiteList[buyer] = true;
     }
 
-    function removeWhiteList(address whiteListItem) public onlyPermissioned {
-        whiteList[whiteListItem] = false;
+    function removeWhiteList(address buyer) public onlyPermissioned {
+        whiteList[buyer] = false;
     }
 }
