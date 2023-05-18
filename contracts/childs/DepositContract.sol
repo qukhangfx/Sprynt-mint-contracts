@@ -86,20 +86,34 @@ contract DepositContract {
         bool isNativeToken,
         bytes calldata adapterParams
     ) public payable {
+        DepositFactoryContract depositFactoryContract = DepositFactoryContract(
+            _factoryContractAddress
+        );
+
+        require(
+            depositFactoryContract.currentStage() != 0,
+            "We have not ready yet!"
+        );
+
         require(depositItem.sellerAddress == _sellerAddress, "Invalid seller!");
+
         require(
             depositItem.mintQuantity >= minMintQuantity &&
                 depositItem.mintQuantity <= maxMintQuantity,
             "Invalid mint quantity!"
         );
+
         require(
             _mintedTokens + depositItem.mintQuantity <= totalSupply,
             "Exceed total supply!"
         );
+
         require(depositItem.dstChainId == dstChainId, "Invalid dst chain id!");
+
         require(depositItem.deadline <= deadline, "Invalid deadline!");
 
-        if (whiteList[msg.sender]) {
+        if (depositFactoryContract.currentStage() == 1) {
+            require(whiteList[msg.sender], "You are not in white list!");
             require(
                 depositItem.mintPrice == whiteListMintPrice,
                 "Invalid mint price!"

@@ -46,6 +46,8 @@ contract DepositFactoryContract is
 
     address[] private _depositContractsList;
 
+    uint256 public currentStage = 0;
+
     event SetAdminWallet(address adminWallet);
     event SetPlatformFee(uint96 platformFee);
     event DepositedToken(
@@ -546,5 +548,9 @@ contract DepositFactoryContract is
         address seller
     ) public view returns (address) {
         return deployedDepositContracts[dstChainId][seller];
+    }
+
+    function changeStage(uint256 stage) external onlyRole(OWNER_ROLE){
+        currentStage = stage;
     }
 }
