@@ -60,6 +60,7 @@ contract ReceiveFactoryContract is NonblockingLzApp {
         uint256 maxMintQuantity,
         uint256 totalSupply,
         uint256 deadline,
+        address[] memory whiteList,
         bytes calldata adapterParams
     ) external payable {
         bytes memory encodedPayload = abi.encode(
@@ -71,7 +72,8 @@ contract ReceiveFactoryContract is NonblockingLzApp {
             minMintQuantity,
             maxMintQuantity,
             totalSupply,
-            deadline
+            deadline,
+            whiteList
         );
         (uint nativeFee, uint zroFee) = estimateFee(
             dstChainId,
@@ -105,7 +107,6 @@ contract ReceiveFactoryContract is NonblockingLzApp {
         ) = abi.decode(_payload, (address, uint256, bytes, address));
         address nftContractAddress = nftContracts[seller];
         require(nftContractAddress != address(0), "NftContract is not created");
-        
 
         ERC1155Contract(nftContractAddress).mintBatchToken(
             clientAddress,

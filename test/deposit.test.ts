@@ -351,6 +351,7 @@ describe("Test multichain minting engine", () => {
           "uint256",
           "uint256",
           "uint256",
+          "address[]"
         ],
         [
           sellerWalletAddress,
@@ -362,8 +363,10 @@ describe("Test multichain minting engine", () => {
           100,
           totalSupply,
           deadline,
+          [sellerWalletAddress, clientWalletAddress]
         ]
       );
+
       const estimatedFeeDeposit = await lzEndpointMockDst.estimateFees(
         chainIdSrc,
         receiveFactoryContract.address,
@@ -386,6 +389,7 @@ describe("Test multichain minting engine", () => {
             100,
             totalSupply,
             deadline,
+            [sellerWalletAddress, clientWalletAddress],
             adapterParamsD,
             {
               value: estimatedFeeDeposit.nativeFee,

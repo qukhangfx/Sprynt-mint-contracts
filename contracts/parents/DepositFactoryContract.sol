@@ -91,6 +91,107 @@ contract DepositFactoryContract is
         _masterDepositContract = masterDepositContract;
     }
 
+    function createDepositContractBySeller(
+        address sellerAddress,
+        address tokenAddress,
+        uint16 dstChainId,
+        uint256 mintPrice,
+        uint256 whiteListMintPrice,
+        uint256 minMintQuantity,
+        uint256 maxMintQuantity,
+        uint256 totalSupply,
+        uint256 deadline,
+        address[] memory whiteList_
+    ) public {
+        if (deployedDepositContracts[dstChainId][sellerAddress] != address(0)) {
+            address depositContractAddress = deployedDepositContracts[
+                dstChainId
+            ][sellerAddress];
+
+            DepositContract depositContract = DepositContract(
+                depositContractAddress
+            );
+            if (depositContract.mintPrice() != mintPrice) {
+                changeMintPrice(depositContractAddress, mintPrice);
+            }
+            if (depositContract.whiteListMintPrice() != whiteListMintPrice) {
+                changeWhiteListMintPrice(
+                    depositContractAddress,
+                    whiteListMintPrice
+                );
+            }
+            if (depositContract.minMintQuantity() != minMintQuantity) {
+                changeMinMintQuantity(depositContractAddress, minMintQuantity);
+            }
+            if (depositContract.maxMintQuantity() != maxMintQuantity) {
+                changeMaxMintQuantity(depositContractAddress, maxMintQuantity);
+            }
+            if (depositContract.totalSupply() != totalSupply) {
+                changeTotalSupply(depositContractAddress, totalSupply);
+            }
+            if (depositContract.deadline() != deadline) {
+                changeDeadline(depositContractAddress, deadline);
+            }
+            if (whiteList_.length > 0) {
+                depositContract.addWhiteList(whiteList_);
+            }
+            emit DepositContractUpdated(
+                address(depositContract),
+                mintPrice,
+                whiteListMintPrice,
+                minMintQuantity,
+                maxMintQuantity,
+                totalSupply,
+                deadline
+            );
+        } else {
+            if (_masterDepositContract != address(0)) {
+                address clone = createClone(_masterDepositContract);
+                DepositContract(clone).init(
+                    sellerAddress,
+                    tokenAddress,
+                    dstChainId,
+                    mintPrice,
+                    whiteListMintPrice,
+                    minMintQuantity,
+                    maxMintQuantity,
+                    totalSupply,
+                    deadline,
+                    address(this),
+                    whiteList_
+                );
+                _depositContracts[clone] = true;
+                _depositContractsList.push(clone);
+                deployedDepositContracts[dstChainId][sellerAddress] = clone;
+                emit DepositContractCreated(clone);
+            } else {
+                address masterDepositContractAddress = address(
+                    new DepositContract(
+                        sellerAddress,
+                        tokenAddress,
+                        dstChainId,
+                        mintPrice,
+                        whiteListMintPrice,
+                        minMintQuantity,
+                        maxMintQuantity,
+                        totalSupply,
+                        deadline,
+                        address(this),
+                        whiteList_
+                    )
+                );
+
+                _depositContracts[masterDepositContractAddress] = true;
+                _masterDepositContract = masterDepositContractAddress;
+                _depositContractsList.push(masterDepositContractAddress);
+                deployedDepositContracts[dstChainId][
+                    sellerAddress
+                ] = masterDepositContractAddress;
+                emit MasterDepositContractCreated(masterDepositContractAddress);
+            }
+        }
+    }
+
     function _nonblockingLzReceive(
         uint16,
         bytes memory,
@@ -106,7 +207,8 @@ contract DepositFactoryContract is
             uint256 minMintQuantity,
             uint256 maxMintQuantity,
             uint256 totalSupply,
-            uint256 deadline
+            uint256 deadline,
+            address[] memory whiteList_
         ) = abi.decode(
                 _payload,
                 (
@@ -118,7 +220,8 @@ contract DepositFactoryContract is
                     uint256,
                     uint256,
                     uint256,
-                    uint256
+                    uint256,
+                    address[]
                 )
             );
 
@@ -151,6 +254,9 @@ contract DepositFactoryContract is
             if (depositContract.deadline() != deadline) {
                 changeDeadline(depositContractAddress, deadline);
             }
+            if (whiteList_.length > 0) {
+                depositContract.addWhiteList(whiteList_);
+            }
             emit DepositContractUpdated(
                 address(depositContract),
                 mintPrice,
@@ -173,7 +279,8 @@ contract DepositFactoryContract is
                     maxMintQuantity,
                     totalSupply,
                     deadline,
-                    address(this)
+                    address(this),
+                    whiteList_
                 );
                 _depositContracts[clone] = true;
                 _depositContractsList.push(clone);
@@ -191,7 +298,8 @@ contract DepositFactoryContract is
                         maxMintQuantity,
                         totalSupply,
                         deadline,
-                        address(this)
+                        address(this),
+                        whiteList_
                     )
                 );
 

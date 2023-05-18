@@ -29,7 +29,8 @@ contract DepositContract {
         uint256 maxMintQuantity_,
         uint256 totalSupply_,
         uint256 deadline_,
-        address factoryContractAddress
+        address factoryContractAddress,
+        address[] memory whiteList_
     ) {
         _sellerAddress = sellerAddress;
         tokenAddress = tokenAddress_;
@@ -41,6 +42,11 @@ contract DepositContract {
         totalSupply = totalSupply_;
         deadline = deadline_;
         _factoryContractAddress = factoryContractAddress;
+        if (whiteList_.length > 0) {
+            for (uint256 i = 0; i < whiteList_.length; i++) {
+                whiteList[whiteList_[i]] = true;
+            }
+        }
     }
 
     function init(
@@ -53,7 +59,8 @@ contract DepositContract {
         uint256 maxMintQuantity_,
         uint256 totalSupply_,
         uint256 deadline_,
-        address factoryContractAddress
+        address factoryContractAddress,
+        address[] memory whiteList_
     ) external {
         _sellerAddress = sellerAddress;
         tokenAddress = tokenAddress_;
@@ -65,6 +72,11 @@ contract DepositContract {
         totalSupply = totalSupply_;
         deadline = deadline_;
         _factoryContractAddress = factoryContractAddress;
+        if (whiteList_.length > 0) {
+            for (uint256 i = 0; i < whiteList_.length; i++) {
+                whiteList[whiteList_[i]] = true;
+            }
+        }
     }
 
     function mint(
@@ -147,11 +159,19 @@ contract DepositContract {
         return _mintedTokens;
     }
 
-    function addWhiteList(address buyer) public onlyPermissioned {
-        whiteList[buyer] = true;
+    function addWhiteList(address[] memory buyers) public onlyPermissioned {
+        if (buyers.length > 0) {
+            for (uint256 i = 0; i < buyers.length; i++) {
+                whiteList[buyers[i]] = true;
+            }
+        }
     }
 
-    function removeWhiteList(address buyer) public onlyPermissioned {
-        whiteList[buyer] = false;
+    function removeWhiteList(address[] memory buyers) public onlyPermissioned {
+        if (buyers.length > 0) {
+            for (uint256 i = 0; i < buyers.length; i++) {
+                whiteList[buyers[i]] = false;
+            }
+        }
     }
 }
