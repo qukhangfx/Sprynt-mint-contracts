@@ -106,21 +106,31 @@ export const deployChildContractsBySeller = async (taskArgs: any, hre: any) => {
         encodedPayload
       );
 
-      let depositContractCreation = await (
+      let payContractCreation = await (
         await receiveFactoryContract
           .connect(seller)
           .createPayContractBySeller(
             maxAcceptValue,
             true,
             usdcAddresses[depositChain],
-            layerzeroConfig[mintChain].chainId,
+            layerzeroConfig[depositChain].chainId,
             adapterParams,
             { value: gasFee.nativeFee }
           )
       ).wait();
 
-      console.log(depositContractCreation);
-
+      if (payContractCreation.status == 1) {
+        const events = payContractCreation.events;
+        if (events && events.length) {
+          for (const eventObject of events) {
+            if (eventObject.event == "SimplePayContractCreated") {
+              const payContractAddress = eventObject.args["simplePayContractAddress"];
+              console.log(`Pay Contract is deployed at: ${payContractAddress}`);
+              break;
+            }
+          }
+        }
+      }
       // if (hre.network.name !== depositChain) {
       //   await hre.changeNetwork(depositChain);
       //   console.log(`Deployer: switched on ${depositChain}`);

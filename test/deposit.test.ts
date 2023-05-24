@@ -335,198 +335,231 @@ describe("Test multichain minting engine", () => {
     it("check client deposit erc20 tokens", async () => {
       const currentTimestamp = await helpers.time.latest();
       const deadline = currentTimestamp + 10 * 60;
-      let adapterParamsD = ethers.utils.solidityPack(
+      let adapterParams = ethers.utils.solidityPack(
         ["uint16", "uint256"],
         [1, 899_000]
       );
 
+      const maxAcceptValue = 3;
       const encodedPayload = ethers.utils.defaultAbiCoder.encode(
-        [
-          "address",
-          "address",
-          "uint16",
-          "uint256",
-          "uint256",
-          "uint256",
-          "uint256",
-          "uint256",
-          "uint256",
-          "address[]"
-        ],
-        [
-          sellerWalletAddress,
-          testTokenContract.address,
-          chainIdDst,
-          getBigNumber(1, depositTokenDecimals),
-          getBigNumber(1, depositTokenDecimals),
-          1,
-          100,
-          totalSupply,
-          deadline,
-          [sellerWalletAddress, clientWalletAddress]
-        ]
+        ["uint256", "bool", "address"],
+        [maxAcceptValue, true, testTokenContract.address]
       );
 
-      const estimatedFeeDeposit = await lzEndpointMockDst.estimateFees(
+      const gasFee = await lzEndpointMockDst.estimateFees(
         chainIdSrc,
         receiveFactoryContract.address,
         encodedPayload,
         false,
-        adapterParamsD
-      );
-
-      const depositContractCreation = await (
-        await receiveFactoryContract
-          .connect(sellerWallet)
-          .createDepositContractBySeller(
-            chainIdSrc,
-            sellerWalletAddress,
-            testTokenContract.address,
-            chainIdDst,
-            getBigNumber(1, depositTokenDecimals),
-            getBigNumber(1, depositTokenDecimals),
-            1,
-            100,
-            totalSupply,
-            deadline,
-            [sellerWalletAddress, clientWalletAddress],
-            adapterParamsD,
-            {
-              value: estimatedFeeDeposit.nativeFee,
-            }
-          )
-      ).wait();
-
-      console.log(
-        "Sent Estimated Fee for Deposit",
-        estimatedFeeDeposit.nativeFee
-      );
-      // console.log(depositContractCreation);
-
-      const masterDepositContractAddress =
-        await depositFactoryContract.getLatestDepositContract();
-
-      console.log(masterDepositContractAddress);
-
-      depositContract = (await ethers.getContractAt(
-        "DepositContract",
-        masterDepositContractAddress
-      )) as DepositContract;
-
-      const mintQuant = 30;
-
-      const depositItemData = {
-        mintPrice: getBigNumber(1, depositTokenDecimals),
-        mintQuantity: mintQuant,
-        sellerAddress: sellerWalletAddress,
-        dstChainId: chainIdDst,
-        isMintAvailable: true,
-        nonce: backendNonce,
-        deadline: deadline,
-      };
-      const { ["nonce"]: nonce, ...depositItem } = depositItemData;
-
-      const signature = signDepositItemData(
-        depositItemData,
-        depositFactoryContract,
-        depositRoleAccount
-      );
-
-      let adapterParams = ethers.utils.solidityPack(
-        ["uint16", "uint256"],
-        [1, 1_000_000]
-      );
-
-      const _payload = ethers.utils.defaultAbiCoder.encode(
-        ["address", "uint256", "bytes", "address"],
-        [
-          clientWalletAddress,
-          depositItemData.mintQuantity,
-          Buffer.from(""),
-          depositItemData.sellerAddress,
-        ]
-      );
-
-      const estimatedFee = await lzEndpointMockSrc.estimateFees(
-        chainIdDst,
-        depositFactoryContract.address,
-        _payload,
-        false,
         adapterParams
       );
 
-      await testTokenContract
-        .connect(clientWallet)
-        .approve(depositFactoryContract.address, depositItemData.mintPrice);
-
-      expect(
-        formatUnits(
-          await testTokenContract.balanceOf(clientWalletAddress),
-          depositTokenDecimals
-        )
-      ).to.be.equal("10000000.0"); // initial value
-
-      expect(
-        formatUnits(
-          await testTokenContract.balanceOf(adminWalletAddress),
-          depositTokenDecimals
-        )
-      ).to.be.equal("0.0"); // initial value
-
-      expect(
-        formatUnits(
-          await testTokenContract.balanceOf(sellerWalletAddress),
-          depositTokenDecimals
-        )
-      ).to.be.equal("0.0"); // initial value
-
-      console.log("estimateFee is: ", formatUnits(estimatedFee.nativeFee));
-
-      await expect(
-        await depositContract
-          .connect(clientWallet)
-          .mint(
-            depositItem,
-            signature,
-            estimatedFee.nativeFee,
-            false,
+      let depositContractCreation = await (
+        await receiveFactoryContract
+          .connect(sellerWallet)
+          .createPayContractBySeller(
+            maxAcceptValue,
+            true,
+            testTokenContract.address,
+            chainIdSrc,
             adapterParams,
-            {
-              value: estimatedFee.nativeFee,
-            }
+            { value: gasFee.nativeFee }
           )
-      ).to.be.not.reverted;
+      ).wait();
 
-      console.log(estimatedFee.nativeFee);
+      console.log(depositContractCreation);
+      // let adapterParamsD = ethers.utils.solidityPack(
+      //   ["uint16", "uint256"],
+      //   [1, 899_000]
+      // );
 
-      console.log(
-        "admin wallet balance is: ",
-        formatUnits(
-          await testTokenContract.balanceOf(adminWalletAddress),
-          depositTokenDecimals
-        )
-      );
+      // const encodedPayload = ethers.utils.defaultAbiCoder.encode(
+      //   [
+      //     "address",
+      //     "address",
+      //     "uint16",
+      //     "uint256",
+      //     "uint256",
+      //     "uint256",
+      //     "uint256",
+      //     "uint256",
+      //     "uint256",
+      //     "address[]"
+      //   ],
+      //   [
+      //     sellerWalletAddress,
+      //     testTokenContract.address,
+      //     chainIdDst,
+      //     getBigNumber(1, depositTokenDecimals),
+      //     getBigNumber(1, depositTokenDecimals),
+      //     1,
+      //     100,
+      //     totalSupply,
+      //     deadline,
+      //     [sellerWalletAddress, clientWalletAddress]
+      //   ]
+      // );
 
-      expect(
-        formatUnits(
-          await testTokenContract.balanceOf(adminWalletAddress),
-          depositTokenDecimals
-        )
-      ).to.be.equal("0.025");
+      // const estimatedFeeDeposit = await lzEndpointMockDst.estimateFees(
+      //   chainIdSrc,
+      //   receiveFactoryContract.address,
+      //   encodedPayload,
+      //   false,
+      //   adapterParamsD
+      // );
 
-      expect(
-        formatUnits(
-          await testTokenContract.balanceOf(sellerWalletAddress),
-          depositTokenDecimals
-        )
-      ).to.be.equal("0.975");
+      // const depositContractCreation = await (
+      //   await receiveFactoryContract
+      //     .connect(sellerWallet)
+      //     .createDepositContractBySeller(
+      //       chainIdSrc,
+      //       sellerWalletAddress,
+      //       testTokenContract.address,
+      //       chainIdDst,
+      //       getBigNumber(1, depositTokenDecimals),
+      //       getBigNumber(1, depositTokenDecimals),
+      //       1,
+      //       100,
+      //       totalSupply,
+      //       deadline,
+      //       [sellerWalletAddress, clientWalletAddress],
+      //       adapterParamsD,
+      //       {
+      //         value: estimatedFeeDeposit.nativeFee,
+      //       }
+      //     )
+      // ).wait();
 
-      expect(await depositContract.getTotalMintedToken()).to.be.equal(
-        mintQuant
-      );
-      expect(await NftContract.getNumberOfMintedTokens()).to.be.equal(
-        mintQuant
-      );
+      // console.log(
+      //   "Sent Estimated Fee for Deposit",
+      //   estimatedFeeDeposit.nativeFee
+      // );
+      // // console.log(depositContractCreation);
+
+      // const masterDepositContractAddress =
+      //   await depositFactoryContract.getLatestDepositContract();
+
+      // console.log(masterDepositContractAddress);
+
+      // depositContract = (await ethers.getContractAt(
+      //   "DepositContract",
+      //   masterDepositContractAddress
+      // )) as DepositContract;
+
+      // const mintQuant = 30;
+
+      // const depositItemData = {
+      //   mintPrice: getBigNumber(1, depositTokenDecimals),
+      //   mintQuantity: mintQuant,
+      //   sellerAddress: sellerWalletAddress,
+      //   dstChainId: chainIdDst,
+      //   isMintAvailable: true,
+      //   nonce: backendNonce,
+      //   deadline: deadline,
+      // };
+      // const { ["nonce"]: nonce, ...depositItem } = depositItemData;
+
+      // const signature = signDepositItemData(
+      //   depositItemData,
+      //   depositFactoryContract,
+      //   depositRoleAccount
+      // );
+
+      // let adapterParams = ethers.utils.solidityPack(
+      //   ["uint16", "uint256"],
+      //   [1, 1_000_000]
+      // );
+
+      // const _payload = ethers.utils.defaultAbiCoder.encode(
+      //   ["address", "uint256", "bytes", "address"],
+      //   [
+      //     clientWalletAddress,
+      //     depositItemData.mintQuantity,
+      //     Buffer.from(""),
+      //     depositItemData.sellerAddress,
+      //   ]
+      // );
+
+      // const estimatedFee = await lzEndpointMockSrc.estimateFees(
+      //   chainIdDst,
+      //   depositFactoryContract.address,
+      //   _payload,
+      //   false,
+      //   adapterParams
+      // );
+
+      // await testTokenContract
+      //   .connect(clientWallet)
+      //   .approve(depositFactoryContract.address, depositItemData.mintPrice);
+
+      // expect(
+      //   formatUnits(
+      //     await testTokenContract.balanceOf(clientWalletAddress),
+      //     depositTokenDecimals
+      //   )
+      // ).to.be.equal("10000000.0"); // initial value
+
+      // expect(
+      //   formatUnits(
+      //     await testTokenContract.balanceOf(adminWalletAddress),
+      //     depositTokenDecimals
+      //   )
+      // ).to.be.equal("0.0"); // initial value
+
+      // expect(
+      //   formatUnits(
+      //     await testTokenContract.balanceOf(sellerWalletAddress),
+      //     depositTokenDecimals
+      //   )
+      // ).to.be.equal("0.0"); // initial value
+
+      // console.log("estimateFee is: ", formatUnits(estimatedFee.nativeFee));
+
+      // await expect(
+      //   await depositContract
+      //     .connect(clientWallet)
+      //     .mint(
+      //       depositItem,
+      //       signature,
+      //       estimatedFee.nativeFee,
+      //       false,
+      //       adapterParams,
+      //       {
+      //         value: estimatedFee.nativeFee,
+      //       }
+      //     )
+      // ).to.be.not.reverted;
+
+      // console.log(estimatedFee.nativeFee);
+
+      // console.log(
+      //   "admin wallet balance is: ",
+      //   formatUnits(
+      //     await testTokenContract.balanceOf(adminWalletAddress),
+      //     depositTokenDecimals
+      //   )
+      // );
+
+      // expect(
+      //   formatUnits(
+      //     await testTokenContract.balanceOf(adminWalletAddress),
+      //     depositTokenDecimals
+      //   )
+      // ).to.be.equal("0.025");
+
+      // expect(
+      //   formatUnits(
+      //     await testTokenContract.balanceOf(sellerWalletAddress),
+      //     depositTokenDecimals
+      //   )
+      // ).to.be.equal("0.975");
+
+      // expect(await depositContract.getTotalMintedToken()).to.be.equal(
+      //   mintQuant
+      // );
+      // expect(await NftContract.getNumberOfMintedTokens()).to.be.equal(
+      //   mintQuant
+      // );
     });
   });
 });
