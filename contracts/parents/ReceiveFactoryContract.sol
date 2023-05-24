@@ -49,6 +49,38 @@ contract ReceiveFactoryContract is NonblockingLzApp {
         emit CreatedNftContract(tokenUri, msg.sender, address(newNftContract));
     }
 
+     function createPayContractBySeller(
+        uint256 maxAcceptedValue,
+        bool forwarded,
+        address tokenAddress,
+        uint16 dstChainId,
+        bytes calldata adapterParams
+    ) public payable {
+        bytes memory encodedPayload = abi.encode(
+            maxAcceptedValue,
+            forwarded,
+            tokenAddress
+        );
+
+        (uint nativeFee, uint zroFee) = estimateFee(
+            dstChainId,
+            false,
+            adapterParams,
+            encodedPayload
+        );
+
+        require(msg.value >= nativeFee, "Insufficient fee");
+
+        _lzSend(
+            dstChainId,
+            encodedPayload,
+            payable(msg.sender),
+            address(0x0),
+            adapterParams,
+            nativeFee
+        );
+    }
+
     function createDepositContractBySeller(
         uint16 dstChainId,
         address sellerAddress,

@@ -50,31 +50,31 @@ export const deployChildContractsBySeller = async (taskArgs: any, hre: any) => {
       receiveFactoryContractAddress
     )) as ReceiveFactoryContract;
 
-    console.log(`Creating ERC1155NFTsContract to ${mintChain}`);
+    // console.log(`Creating ERC1155NFTsContract to ${mintChain}`);
 
-    const txResult = await (
-      await receiveFactoryContract
-        .connect(seller)
-        .createNftContractBySeller(tokenURI)
-    ).wait();
+    // const txResult = await (
+    //   await receiveFactoryContract
+    //     .connect(seller)
+    //     .createNftContractBySeller(tokenURI)
+    // ).wait();
 
-    if (txResult.status == 1) {
-      const events = txResult.events;
-      if (events && events.length) {
-        for (const eventObject of events) {
-          if (eventObject.event == "CreatedNftContract") {
-            const nftContractAddress = eventObject.args["nftContractAddress"];
-            nftMintContractsData[mintChain] = {
-              nftContract: nftContractAddress,
-              factoryContract: receiveFactoryContractAddress,
-              tokenURI,
-            };
-            console.log(`NftContract is deployed at: ${nftContractAddress}`);
-            break;
-          }
-        }
-      }
-    }
+    // if (txResult.status == 1) {
+    //   const events = txResult.events;
+    //   if (events && events.length) {
+    //     for (const eventObject of events) {
+    //       if (eventObject.event == "CreatedNftContract") {
+    //         const nftContractAddress = eventObject.args["nftContractAddress"];
+    //         nftMintContractsData[mintChain] = {
+    //           nftContract: nftContractAddress,
+    //           factoryContract: receiveFactoryContractAddress,
+    //           tokenURI,
+    //         };
+    //         console.log(`NftContract is deployed at: ${nftContractAddress}`);
+    //         break;
+    //       }
+    //     }
+    //   }
+    // }
 
     for (const depositChain of depositChains) {
       if (hre.network.name !== mintChain) {
@@ -93,29 +93,10 @@ export const deployChildContractsBySeller = async (taskArgs: any, hre: any) => {
         [1, 899_000]
       );
 
+      const maxAcceptValue = 3;
       const encodedPayload = ethers.utils.defaultAbiCoder.encode(
-        [
-          "address",
-          "address",
-          "uint16",
-          "uint256",
-          "uint256",
-          "uint256",
-          "uint256",
-          "uint256",
-          "uint256",
-        ],
-        [
-          sellerAddress,
-          usdcAddresses[depositChain],
-          layerzeroConfig[mintChain].chainId,
-          getBigNumber(1, depositTokenDecimals),
-          getBigNumber(1, depositTokenDecimals),
-          1,
-          100,
-          100,
-          deadline,
-        ]
+        ["uint256", "bool", "address"],
+        [maxAcceptValue, true, usdcAddresses[depositChain]]
       );
 
       const gasFee = await receiveFactoryContract.estimateFee(
@@ -128,17 +109,11 @@ export const deployChildContractsBySeller = async (taskArgs: any, hre: any) => {
       let depositContractCreation = await (
         await receiveFactoryContract
           .connect(seller)
-          .createDepositContractBySeller(
-            layerzeroConfig[depositChain].chainId,
-            sellerAddress,
+          .createPayContractBySeller(
+            maxAcceptValue,
+            true,
             usdcAddresses[depositChain],
             layerzeroConfig[mintChain].chainId,
-            getBigNumber(1, depositTokenDecimals),
-            getBigNumber(1, depositTokenDecimals),
-            1,
-            100,
-            100,
-            deadline,
             adapterParams,
             { value: gasFee.nativeFee }
           )
@@ -146,33 +121,33 @@ export const deployChildContractsBySeller = async (taskArgs: any, hre: any) => {
 
       console.log(depositContractCreation);
 
-      if (hre.network.name !== depositChain) {
-        await hre.changeNetwork(depositChain);
-        console.log(`Deployer: switched on ${depositChain}`);
-      }
+      // if (hre.network.name !== depositChain) {
+      //   await hre.changeNetwork(depositChain);
+      //   console.log(`Deployer: switched on ${depositChain}`);
+      // }
 
-      let depositFactoryContractAddress =
-        depositFactoryContractData[depositChain];
+      // let depositFactoryContractAddress =
+      //   depositFactoryContractData[depositChain];
 
-      let depositFactoryContract = (await hre.ethers.getContractAt(
-        "DepositFactoryContract",
-        depositFactoryContractAddress
-      )) as DepositFactoryContract;
+      // let depositFactoryContract = (await hre.ethers.getContractAt(
+      //   "DepositFactoryContract",
+      //   depositFactoryContractAddress
+      // )) as DepositFactoryContract;
 
-      let depositContractAddress =
-        await depositFactoryContract.getLatestDepositContract();
+      // let depositContractAddress =
+      //   await depositFactoryContract.getLatestDepositContract();
 
-      console.log(
-        `depositContractAddress on ${depositChain} is: `,
-        depositContractAddress
-      );
+      // console.log(
+      //   `depositContractAddress on ${depositChain} is: `,
+      //   depositContractAddress
+      // );
 
-      depositContractData[depositChain] = depositContractAddress;
+      // depositContractData[depositChain] = depositContractAddress;
     }
   } catch (e) {
     console.log(e);
   }
 
-  await save("DepositContracts", depositContractData);
-  await save("NftMintContractsData", nftMintContractsData);
+  // await save("DepositContracts", depositContractData);
+  // await save("NftMintContractsData", nftMintContractsData);
 };
