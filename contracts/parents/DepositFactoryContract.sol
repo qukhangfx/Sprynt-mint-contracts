@@ -103,8 +103,7 @@ contract DepositFactoryContract is
         uint64,
         bytes memory _payload
     ) internal override {
-        (uint256 maxAcceptedValue, bool forwarded, address tokenAddress) = abi
-            .decode(_payload, (address, uint256, address));
+        (uint256 maxAcceptedValue, bool forwarded, address tokenAddress) = abi.decode(_payload, (uint256, bool, address));
         require(
             payContracts[msg.sender] == address(0),
             "already created pay contract."

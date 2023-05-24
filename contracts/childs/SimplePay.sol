@@ -41,9 +41,9 @@ contract SimplePay is AccessControl {
         require(value <= _maxAcceptedValue, "Value too high");
         if (isNativeToken) {
             if (_forwarded) {
-                Address.sendValue(_owner, value);
+                Address.sendValue(payable(_owner), value);
             } else {
-                Address.sendValue(address(this), value)
+                Address.sendValue(payable(address(this)), value);
             }
         } else {
             IERC20(_tokenAddress).safeTransferFrom(tx.origin, _owner, value);
