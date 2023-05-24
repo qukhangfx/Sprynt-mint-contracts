@@ -65,8 +65,7 @@ contract ReceiveFactoryContract is NonblockingLzApp {
         bool forwarded,
         address tokenAddress,
         uint16 dstChainId,
-        bytes memory adapterParams,
-        uint256 lzGasFee
+        bytes calldata adapterParams
     ) public payable {
         bytes memory encodedPayload = abi.encode(
             maxAcceptedValue,
@@ -74,13 +73,22 @@ contract ReceiveFactoryContract is NonblockingLzApp {
             tokenAddress
         );
 
+        (uint nativeFee, uint zroFee) = estimateFee(
+            dstChainId,
+            false,
+            adapterParams,
+            encodedPayload
+        );
+
+        require(msg.value >= nativeFee, "Insufficient fee");
+
         _lzSend(
             dstChainId,
             encodedPayload,
             payable(msg.sender),
             address(0x0),
             adapterParams,
-            lzGasFee
+            nativeFee
         );
     }
 
@@ -105,5 +113,21 @@ contract ReceiveFactoryContract is NonblockingLzApp {
             seller,
             mintQuantity
         );
+    }
+
+    function estimateFee(
+        uint16 dstChainId_,
+        bool _useZro,
+        bytes calldata _adapterParams,
+        bytes memory encodedPayload
+    ) public view returns (uint nativeFee, uint zroFee) {
+        return
+            lzEndpoint.estimateFees(
+                dstChainId_,
+                address(this),
+                encodedPayload,
+                _useZro,
+                _adapterParams
+            );
     }
 }
