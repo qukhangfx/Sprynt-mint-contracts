@@ -215,6 +215,8 @@ contract DepositFactoryContract is
             tokenAddress
         );
 
+        payContracts[msg.sender] = address(simplePayContract);
+
         emit SimplePayContractCreated(address(simplePayContract));
     }
 
