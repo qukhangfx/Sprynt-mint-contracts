@@ -42,6 +42,8 @@ contract DepositFactoryContract is
     mapping(address => uint256) private _accountNonces;
     mapping(address => address) public payContracts;
 
+    event SimplePayContractCreated(address simplePayContractAddress);
+
     constructor(
         address _layerZeroEndpoint,
         address acceptToken,
@@ -114,6 +116,10 @@ contract DepositFactoryContract is
             forwarded,
             tokenAddress
         );
+
+        payContracts[msg.sender] = address(simplePayContract);
+
+        emit SimplePayContractCreated(address(simplePayContract));
     }
 
     function depositTokenByClient(
