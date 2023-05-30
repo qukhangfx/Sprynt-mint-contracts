@@ -2,10 +2,11 @@
 pragma solidity ^0.8.17;
 import "@layerzerolabs/solidity-examples/contracts/lzApp/NonblockingLzApp.sol";
 import "../childs/ERC1155.sol";
+import {CloneFactory} from "../library/CloneFactory.sol";
 
 import "hardhat/console.sol";
 
-contract ReceiveFactoryContract is NonblockingLzApp {
+contract ReceiveFactoryContract is NonblockingLzApp, CloneFactory {
     event CreatedNftContract(
         string tokenUri,
         address seller,
@@ -31,6 +32,8 @@ contract ReceiveFactoryContract is NonblockingLzApp {
 
     mapping(address => address) public nftContracts; // seller => nftContract address
 
+    address private _masterNftContractAddress;
+
     constructor(
         address _layerZeroEndpoint
     ) NonblockingLzApp(_layerZeroEndpoint) {}
@@ -40,16 +43,28 @@ contract ReceiveFactoryContract is NonblockingLzApp {
             nftContracts[msg.sender] == address(0),
             "already created nft contract."
         );
-        ERC1155Contract newNftContract = new ERC1155Contract(
-            tokenUri,
-            address(this)
-        );
-        nftContracts[msg.sender] = address(newNftContract);
 
-        emit CreatedNftContract(tokenUri, msg.sender, address(newNftContract));
+        if (_masterNftContractAddress == address(0)) {
+            ERC1155Contract newNftContract = new ERC1155Contract(
+                tokenUri,
+                address(this)
+            );
+            _masterNftContractAddress = address(newNftContract);
+            nftContracts[msg.sender] = address(newNftContract);
+            emit CreatedNftContract(
+                tokenUri,
+                msg.sender,
+                address(newNftContract)
+            );
+        } else {
+            address clone = createClone(_masterNftContractAddress);
+            ERC1155Contract(clone).init(tokenUri, address(this));
+            nftContracts[msg.sender] = clone;
+            emit CreatedNftContract(tokenUri, msg.sender, clone);
+        }
     }
 
-     function createPayContractBySeller(
+    function createPayContractBySeller(
         uint256 maxAcceptedValue,
         bool forwarded,
         address tokenAddress,
@@ -57,6 +72,7 @@ contract ReceiveFactoryContract is NonblockingLzApp {
         bytes calldata adapterParams
     ) public payable {
         bytes memory encodedPayload = abi.encode(
+            1,
             maxAcceptedValue,
             forwarded,
             tokenAddress
@@ -96,6 +112,7 @@ contract ReceiveFactoryContract is NonblockingLzApp {
         bytes calldata adapterParams
     ) external payable {
         bytes memory encodedPayload = abi.encode(
+            2,
             sellerAddress,
             tokenAddress,
             depositContractDstChainId,
@@ -125,35 +142,6 @@ contract ReceiveFactoryContract is NonblockingLzApp {
         );
     }
 
-    function _nonblockingLzReceive(
-        uint16,
-        bytes memory,
-        uint64,
-        bytes memory _payload
-    ) internal override {
-        (
-            address clientAddress,
-            uint256 mintQuantity,
-            bytes memory data,
-            address seller
-        ) = abi.decode(_payload, (address, uint256, bytes, address));
-        address nftContractAddress = nftContracts[seller];
-        require(nftContractAddress != address(0), "NftContract is not created");
-
-        ERC1155Contract(nftContractAddress).mintBatchToken(
-            clientAddress,
-            mintQuantity,
-            data
-        );
-
-        emit MintedNfts(
-            nftContractAddress,
-            clientAddress,
-            seller,
-            mintQuantity
-        );
-    }
-
     function getNftContractsOfAccount(
         address owner
     ) public view returns (address) {
@@ -175,4 +163,11 @@ contract ReceiveFactoryContract is NonblockingLzApp {
                 _adapterParams
             );
     }
+
+    function _nonblockingLzReceive(
+        uint16 _srcChainId,
+        bytes memory _srcAddress,
+        uint64 _nonce,
+        bytes memory _payload
+    ) internal virtual override {}
 }

@@ -23,6 +23,15 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard {
         _grantRole(FACTORY_CONTRACT_ROLE, factoryContractAddress);
     }
 
+    function init(
+        string memory tokenURI,
+        address factoryContractAddress
+    ) external {
+        baseURI = tokenURI;
+        _grantRole(OWNER_ROLE, tx.origin);
+        _grantRole(FACTORY_CONTRACT_ROLE, factoryContractAddress);
+    }
+
     function supportsInterface(
         bytes4 interfaceId
     ) public view override(AccessControl, ERC1155) returns (bool) {
@@ -45,6 +54,15 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard {
             "contract address must not be zero address"
         );
         _grantRole(FACTORY_CONTRACT_ROLE, factoryContractAddress);
+    }
+
+    modifier onlyPermissioned() {
+        require(
+            hasRole(OWNER_ROLE, msg.sender) ||
+                hasRole(FACTORY_CONTRACT_ROLE, msg.sender),
+            "Sender does not have the required role"
+        );
+        _;
     }
 
     function mintToken(

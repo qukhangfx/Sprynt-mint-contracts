@@ -27,6 +27,18 @@ contract SimplePay is AccessControl {
         _tokenAddress = tokenAddress;
     }
 
+    function init(
+        uint256 maxAcceptedValue,
+        bool forwarded,
+        address tokenAddress
+    ) external {
+        _grantRole(OWNER_ROLE, tx.origin);
+        _owner = tx.origin;
+        _maxAcceptedValue = maxAcceptedValue;
+        _forwarded = forwarded;
+        _tokenAddress = tokenAddress;
+    }
+
     function updateMaxAcceptedValue(
         uint256 maxAcceptedValue
     ) external onlyRole(OWNER_ROLE) {
