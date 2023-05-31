@@ -9,9 +9,10 @@ import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/utils/cryptography/draft-EIP712.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
-
+import {DepositItem} from "../library/Structs.sol";
 import "../library/Domain.sol";
 import "@layerzerolabs/solidity-examples/contracts/lzApp/NonblockingLzApp.sol";
+import "../childs/SimplePay.sol";
 
 import {CloneFactory} from "../library/CloneFactory.sol";
 import {DepositItem} from "../library/Structs.sol";
@@ -295,9 +296,11 @@ contract DepositFactoryContract is
     /**
   @dev Setup deposit role
   */
-    function setupDepositRole(address account) external onlyRole(OWNER_ROLE) {
-        _grantRole(DEPOSIT_ROLE, account);
-    }
+      function setupDepositRole(
+        address account
+    ) external onlyRole(OWNER_ROLE) {
+          _grantRole(DEPOSIT_ROLE, account);
+      }
 
     function revokeDepositRole(address account) external onlyRole(OWNER_ROLE) {
         _revokeRole(DEPOSIT_ROLE, account);
@@ -367,13 +370,13 @@ contract DepositFactoryContract is
         return hasRole(DEPOSIT_ROLE, ECDSA.recover(digest, signature));
     }
 
-    function pause() public virtual onlyRole(DEFAULT_ADMIN_ROLE) {
-        _pause();
-    }
+      function pause() public virtual onlyRole(DEFAULT_ADMIN_ROLE) {
+          _pause();
+      }
 
-    function unpause() public virtual onlyRole(DEFAULT_ADMIN_ROLE) {
-        _unpause();
-    }
+      function unpause() public virtual onlyRole(DEFAULT_ADMIN_ROLE) {
+          _unpause();
+      }
 
     modifier onlyPermissioned() {
         require(
@@ -443,3 +446,4 @@ contract DepositFactoryContract is
         currentStage = stage;
     }
 }
+
