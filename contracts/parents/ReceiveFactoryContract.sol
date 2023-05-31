@@ -38,24 +38,12 @@ contract ReceiveFactoryContract is NonblockingLzApp, CloneFactory {
             "already created nft contract."
         );
 
-        if (_masterNftContractAddress == address(0)) {
-            ERC1155Contract newNftContract = new ERC1155Contract(
-                tokenUri,
-                address(this)
-            );
-            _masterNftContractAddress = address(newNftContract);
-            nftContracts[msg.sender] = address(newNftContract);
-            emit CreatedNftContract(
-                tokenUri,
-                msg.sender,
-                address(newNftContract)
-            );
-        } else {
-            address clone = createClone(_masterNftContractAddress);
+        require(_masterNftContractAddress != address(0), "master nft contract address is not set.");
+
+        address clone = createClone(_masterNftContractAddress);
             ERC1155Contract(clone).init(tokenUri, address(this));
             nftContracts[msg.sender] = clone;
             emit CreatedNftContract(tokenUri, msg.sender, clone);
-        }
     }
 
     function createPayContractBySeller(

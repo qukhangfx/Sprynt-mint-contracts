@@ -97,6 +97,11 @@ contract DepositFactoryContract is
     ) public onlyRole(OWNER_ROLE) {
         _masterDepositContract = masterDepositContract;
     }
+    function setMasterPayContractAddress(
+        address masterPayContract
+    ) public onlyRole(OWNER_ROLE) {
+        _masterPayContract = masterPayContract;
+    }
 
     function createDepositContractBySeller(
         address sellerAddress,
@@ -152,50 +157,28 @@ contract DepositFactoryContract is
                 deadline
             );
         } else {
-            if (_masterDepositContract != address(0)) {
-                address clone = createClone(_masterDepositContract);
-                DepositContract(clone).init(
-                    sellerAddress,
-                    tokenAddress,
-                    dstChainId,
-                    mintPrice,
-                    whiteListMintPrice,
-                    minMintQuantity,
-                    maxMintQuantity,
-                    totalSupply,
-                    deadline,
-                    address(this),
-                    whiteList_
-                );
-                _depositContracts[clone] = true;
-                _depositContractsList.push(clone);
-                deployedDepositContracts[dstChainId][sellerAddress] = clone;
-                emit DepositContractCreated(clone);
-            } else {
-                address masterDepositContractAddress = address(
-                    new DepositContract(
-                        sellerAddress,
-                        tokenAddress,
-                        dstChainId,
-                        mintPrice,
-                        whiteListMintPrice,
-                        minMintQuantity,
-                        maxMintQuantity,
-                        totalSupply,
-                        deadline,
-                        address(this),
-                        whiteList_
-                    )
-                );
-
-                _depositContracts[masterDepositContractAddress] = true;
-                _masterDepositContract = masterDepositContractAddress;
-                _depositContractsList.push(masterDepositContractAddress);
-                deployedDepositContracts[dstChainId][
-                    sellerAddress
-                ] = masterDepositContractAddress;
-                emit MasterDepositContractCreated(masterDepositContractAddress);
-            }
+            require(
+                _masterDepositContract != address(0),
+                "master deposit contract address is not set."
+            );
+            address clone = createClone(_masterDepositContract);
+            DepositContract(clone).init(
+                sellerAddress,
+                tokenAddress,
+                dstChainId,
+                mintPrice,
+                whiteListMintPrice,
+                minMintQuantity,
+                maxMintQuantity,
+                totalSupply,
+                deadline,
+                address(this),
+                whiteList_
+            );
+            _depositContracts[clone] = true;
+            _depositContractsList.push(clone);
+            deployedDepositContracts[dstChainId][sellerAddress] = clone;
+            emit DepositContractCreated(clone);
         }
     }
 
@@ -219,18 +202,8 @@ contract DepositFactoryContract is
                 payContracts[msg.sender] == address(0),
                 "already created pay contract."
             );
-
-            if (_masterPayContract == address(0)) {
-                SimplePay simplePayContract = new SimplePay(
-                    maxAcceptedValue,
-                    forwarded,
-                    tokenAddress
-                );
-                _masterPayContract = address(simplePayContract);
-                payContracts[msg.sender] = address(simplePayContract);
-                emit SimplePayContractCreated(address(simplePayContract));
-            } else {
-                address clone = createClone(_masterPayContract);
+            require(_masterPayContract != address(0), "master pay contract address is not set.");
+            address clone = createClone(_masterPayContract);
                 SimplePay(clone).init(
                     maxAcceptedValue,
                     forwarded,
@@ -238,7 +211,6 @@ contract DepositFactoryContract is
                 );
                 payContracts[msg.sender] = address(clone);
                 emit SimplePayContractCreated(address(clone));
-            }
         } else if (taskType == 2) {
             (
                 address sellerAddress,
@@ -296,11 +268,9 @@ contract DepositFactoryContract is
     /**
   @dev Setup deposit role
   */
-      function setupDepositRole(
-        address account
-    ) external onlyRole(OWNER_ROLE) {
-          _grantRole(DEPOSIT_ROLE, account);
-      }
+    function setupDepositRole(address account) external onlyRole(OWNER_ROLE) {
+        _grantRole(DEPOSIT_ROLE, account);
+    }
 
     function revokeDepositRole(address account) external onlyRole(OWNER_ROLE) {
         _revokeRole(DEPOSIT_ROLE, account);
@@ -370,13 +340,13 @@ contract DepositFactoryContract is
         return hasRole(DEPOSIT_ROLE, ECDSA.recover(digest, signature));
     }
 
-      function pause() public virtual onlyRole(DEFAULT_ADMIN_ROLE) {
-          _pause();
-      }
+    function pause() public virtual onlyRole(DEFAULT_ADMIN_ROLE) {
+        _pause();
+    }
 
-      function unpause() public virtual onlyRole(DEFAULT_ADMIN_ROLE) {
-          _unpause();
-      }
+    function unpause() public virtual onlyRole(DEFAULT_ADMIN_ROLE) {
+        _unpause();
+    }
 
     modifier onlyPermissioned() {
         require(
@@ -446,4 +416,3 @@ contract DepositFactoryContract is
         currentStage = stage;
     }
 }
-
