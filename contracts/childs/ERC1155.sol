@@ -69,7 +69,7 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard {
         address to,
         uint256 id,
         bytes memory data
-    ) external onlyRole(FACTORY_CONTRACT_ROLE) nonReentrant {
+    ) external onlyPermissioned nonReentrant {
         require(to != address(0), "Address must not be zero address");
         _mint(to, id, 1, data);
     }
@@ -78,7 +78,7 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard {
         address to,
         uint256 quantity,
         bytes memory data
-    ) external onlyRole(FACTORY_CONTRACT_ROLE) nonReentrant {
+    ) external onlyPermissioned nonReentrant {
         require(to != address(0), "Address must not be zero address");
         uint256[] memory amounts = new uint256[](quantity);
         uint256[] memory ids = new uint256[](quantity);
