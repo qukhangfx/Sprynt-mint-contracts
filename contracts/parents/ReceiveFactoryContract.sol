@@ -7,11 +7,12 @@ import {CloneFactory} from "../library/CloneFactory.sol";
 import "hardhat/console.sol";
 
 contract ReceiveFactoryContract is NonblockingLzApp, CloneFactory {
-      event CreatedNftContract(
+    event CreatedNftContract(
         string tokenUri,
         address seller,
         address nftContractAddress
     );
+
     event CreatedDepositContract(
         address sellerAddress,
         address tokenAddress,
@@ -23,29 +24,9 @@ contract ReceiveFactoryContract is NonblockingLzApp, CloneFactory {
         uint256 totalSupply,
         uint256 deadline
     );
-    event MintedNfts(
-        address nftContractAddress,
-        address clientAddress,
-        address sellerAddress,
-        uint256 mintQuantity
-    );
 
     mapping(address => address) public nftContracts; // seller => nftContract address
-
-    event CreatedNftContract(
-        string name,
-        string symbol,
-        string tokenUri,
-        uint256 totalSupply,
-        address seller,
-        address nftContractAddress
-    );
-    event MintedNfts(
-        address nftContractAddress,
-        address clientAddress,
-        address sellerAddress,
-        uint256 mintQuantity
-    );
+    address private _masterNftContractAddress;
 
     constructor(
         address _layerZeroEndpoint
