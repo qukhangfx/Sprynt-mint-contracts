@@ -1,12 +1,20 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 import "@layerzerolabs/solidity-examples/contracts/lzApp/NonblockingLzApp.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 import "../childs/ERC1155.sol";
 import {CloneFactory} from "../library/CloneFactory.sol";
 
 import "hardhat/console.sol";
 
-contract ReceiveFactoryContract is NonblockingLzApp, CloneFactory {
+contract ReceiveFactoryContract is
+    NonblockingLzApp,
+    CloneFactory,
+    AccessControl
+{
+    bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
+    bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
+
     event CreatedNftContract(
         string tokenUri,
         address seller,
@@ -28,6 +36,22 @@ contract ReceiveFactoryContract is NonblockingLzApp, CloneFactory {
     mapping(address => address) public nftContracts; // seller => nftContract address
     address private _masterNftContractAddress;
 
+    modifier onlyValidator() {
+        require(
+            hasRole(VALIDATOR_ROLE, msg.sender),
+            "Caller is not a validator"
+        );
+        _;
+    }
+
+    function setupValidatorRole(address account) external onlyOwner {
+        _grantRole(VALIDATOR_ROLE, account);
+    }
+
+    function revokeValidatorRole(address account) external onlyOwner {
+        _revokeRole(VALIDATOR_ROLE, account);
+    }
+
     constructor(
         address _layerZeroEndpoint
     ) NonblockingLzApp(_layerZeroEndpoint) {}
@@ -38,12 +62,42 @@ contract ReceiveFactoryContract is NonblockingLzApp, CloneFactory {
             "already created nft contract."
         );
 
-        require(_masterNftContractAddress != address(0), "master nft contract address is not set.");
+        require(
+            _masterNftContractAddress != address(0),
+            "master nft contract address is not set."
+        );
 
         address clone = createClone(_masterNftContractAddress);
-            ERC1155Contract(clone).init(tokenUri, address(this));
-            nftContracts[msg.sender] = clone;
-            emit CreatedNftContract(tokenUri, msg.sender, clone);
+        ERC1155Contract(clone).init(tokenUri, address(this));
+        nftContracts[msg.sender] = clone;
+        emit CreatedNftContract(tokenUri, msg.sender, clone);
+    }
+
+    function setMasterNftContractAddress(
+        address masterNftContractAddress
+    ) external onlyOwner {
+        _masterNftContractAddress = masterNftContractAddress;
+    }
+
+    function mint(
+        address seller,
+        address to,
+        uint256 amount,
+        bytes memory data
+    ) public onlyValidator {
+        require(
+            nftContracts[seller] != address(0),
+            "nft contract is not created."
+        );
+        if (amount == 1) {
+            ERC1155Contract(nftContracts[seller]).mintToken(to, data);
+        } else {
+            ERC1155Contract(nftContracts[seller]).mintBatchToken(
+                to,
+                amount,
+                data
+            );
+        }
     }
 
     function createPayContractBySeller(

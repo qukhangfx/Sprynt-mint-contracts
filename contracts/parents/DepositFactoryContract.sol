@@ -30,7 +30,7 @@ contract DepositFactoryContract is
 {
     using SafeERC20 for IERC20;
 
-    bytes32 public constant DEPOSIT_ROLE = keccak256("DEPOSIT_ROLE");
+    bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
     bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
 
     uint96 public platformFee = 250; // 2.5% platform fee
@@ -89,7 +89,7 @@ contract DepositFactoryContract is
         _acceptToken = acceptToken;
         _adminWallet = adminWallet;
         _setupRole(OWNER_ROLE, owner);
-        _setupRole(DEPOSIT_ROLE, depositRoleAccount);
+        _setupRole(VALIDATOR_ROLE, depositRoleAccount);
     }
 
     function setMasterDepositContractAddress(
@@ -97,6 +97,7 @@ contract DepositFactoryContract is
     ) public onlyRole(OWNER_ROLE) {
         _masterDepositContract = masterDepositContract;
     }
+
     function setMasterPayContractAddress(
         address masterPayContract
     ) public onlyRole(OWNER_ROLE) {
@@ -202,15 +203,14 @@ contract DepositFactoryContract is
                 payContracts[msg.sender] == address(0),
                 "already created pay contract."
             );
-            require(_masterPayContract != address(0), "master pay contract address is not set.");
+            require(
+                _masterPayContract != address(0),
+                "master pay contract address is not set."
+            );
             address clone = createClone(_masterPayContract);
-                SimplePay(clone).init(
-                    maxAcceptedValue,
-                    forwarded,
-                    tokenAddress
-                );
-                payContracts[msg.sender] = address(clone);
-                emit SimplePayContractCreated(address(clone));
+            SimplePay(clone).init(maxAcceptedValue, forwarded, tokenAddress);
+            payContracts[msg.sender] = address(clone);
+            emit SimplePayContractCreated(address(clone));
         } else if (taskType == 2) {
             (
                 address sellerAddress,
@@ -266,14 +266,16 @@ contract DepositFactoryContract is
     }
 
     /**
-  @dev Setup deposit role
-  */
-    function setupDepositRole(address account) external onlyRole(OWNER_ROLE) {
-        _grantRole(DEPOSIT_ROLE, account);
+    @dev Setup validator role
+    */
+    function setupValidatorRole(address account) external onlyRole(OWNER_ROLE) {
+        _grantRole(VALIDATOR_ROLE, account);
     }
 
-    function revokeDepositRole(address account) external onlyRole(OWNER_ROLE) {
-        _revokeRole(DEPOSIT_ROLE, account);
+    function revokeValidatorRole(
+        address account
+    ) external onlyRole(OWNER_ROLE) {
+        _revokeRole(VALIDATOR_ROLE, account);
     }
 
     function setAdminWallet(
@@ -300,6 +302,66 @@ contract DepositFactoryContract is
             "Only contracts created by this factory can call the function!"
         );
         _;
+    }
+
+    function depositTokenByClient(
+        DepositItem calldata depositItem,
+        bytes calldata signature,
+        uint256 lzGasFee,
+        bool isNativeToken
+    ) external payable nonReentrant whenNotPaused onlyContract {
+        require(
+            block.timestamp <= depositItem.deadline,
+            "Invalid expiration in deposit"
+        );
+        require(depositItem.isMintAvailable, "Mint is not available");
+        if (isNativeToken) {
+            require(
+                msg.value >=
+                    lzGasFee + depositItem.mintPrice * depositItem.mintQuantity,
+                "Insufficient native token balances"
+            );
+        } else {
+            require(msg.value >= lzGasFee, "Insufficient ERC20 token balances");
+        }
+        require(
+            _verify(
+                _hashTypedDataV4(
+                    Domain._hashDepositItem(
+                        depositItem,
+                        _accountNonces[tx.origin]
+                    )
+                ),
+                signature
+            ),
+            "Invalid signature"
+        );
+        unchecked {
+            ++_accountNonces[tx.origin];
+        }
+        uint256 platformFeeAmount = _calcFeeAmount(
+            depositItem.mintPrice,
+            platformFee
+        );
+        uint256 userProfit = depositItem.mintPrice - platformFeeAmount;
+
+        if (isNativeToken) {
+            Address.sendValue(payable(_adminWallet), platformFeeAmount);
+            Address.sendValue(payable(depositItem.sellerAddress), userProfit);
+        } else {
+            IERC20(_acceptToken).safeTransferFrom(
+                tx.origin,
+                _adminWallet,
+                platformFeeAmount
+            );
+            IERC20(_acceptToken).safeTransferFrom(
+                tx.origin,
+                depositItem.sellerAddress,
+                userProfit
+            );
+        }
+
+        emit DepositedToken(depositItem, lzGasFee, isNativeToken);
     }
 
     function estimateFee(
@@ -337,7 +399,7 @@ contract DepositFactoryContract is
         bytes32 digest,
         bytes memory signature
     ) internal view returns (bool) {
-        return hasRole(DEPOSIT_ROLE, ECDSA.recover(digest, signature));
+        return hasRole(VALIDATOR_ROLE, ECDSA.recover(digest, signature));
     }
 
     function pause() public virtual onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -351,7 +413,7 @@ contract DepositFactoryContract is
     modifier onlyPermissioned() {
         require(
             hasRole(OWNER_ROLE, msg.sender) ||
-                hasRole(DEPOSIT_ROLE, msg.sender),
+                hasRole(VALIDATOR_ROLE, msg.sender),
             "Sender does not have the required role"
         );
         _;

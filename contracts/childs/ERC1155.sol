@@ -67,11 +67,10 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard {
 
     function mintToken(
         address to,
-        uint256 id,
         bytes memory data
     ) external onlyPermissioned nonReentrant {
         require(to != address(0), "Address must not be zero address");
-        _mint(to, id, 1, data);
+        _mint(to, ++_mintedTokens, 1, data);
     }
 
     function mintBatchToken(
