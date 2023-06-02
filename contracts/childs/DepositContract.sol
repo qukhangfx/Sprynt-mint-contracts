@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.17;
+import "@openzeppelin/contracts/utils/Address.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "../library/Domain.sol";
 import {DepositItem} from "../library/Structs.sol";
 import {DepositFactoryContract} from "../parents/DepositFactoryContract.sol";
 
@@ -15,39 +19,17 @@ contract DepositContract {
     uint256 public deadline;
     address private _factoryContractAddress;
 
+    uint256 public currentStage;
+
+    bool public initialized;
+
     uint256 private _mintedTokens;
 
     mapping(address => bool) public whiteList;
 
-    constructor(
-        address sellerAddress,
-        address tokenAddress_,
-        uint256 dstChainId_,
-        uint256 mintPrice_,
-        uint256 whiteListMintPrice_,
-        uint256 minMintQuantity_,
-        uint256 maxMintQuantity_,
-        uint256 totalSupply_,
-        uint256 deadline_,
-        address factoryContractAddress,
-        address[] memory whiteList_
-    ) {
-        _sellerAddress = sellerAddress;
-        tokenAddress = tokenAddress_;
-        dstChainId = dstChainId_;
-        mintPrice = mintPrice_;
-        whiteListMintPrice = whiteListMintPrice_;
-        minMintQuantity = minMintQuantity_;
-        maxMintQuantity = maxMintQuantity_;
-        totalSupply = totalSupply_;
-        deadline = deadline_;
-        _factoryContractAddress = factoryContractAddress;
-        if (whiteList_.length > 0) {
-            for (uint256 i = 0; i < whiteList_.length; i++) {
-                whiteList[whiteList_[i]] = true;
-            }
-        }
-    }
+    using SafeERC20 for IERC20;
+
+    constructor() {}
 
     function init(
         address sellerAddress,
@@ -62,6 +44,8 @@ contract DepositContract {
         address factoryContractAddress,
         address[] memory whiteList_
     ) external {
+        require(!initialized, "Contract is already initialized");
+        currentStage = 0;
         _sellerAddress = sellerAddress;
         tokenAddress = tokenAddress_;
         dstChainId = dstChainId_;
@@ -77,22 +61,12 @@ contract DepositContract {
                 whiteList[whiteList_[i]] = true;
             }
         }
+
+        initialized = true;
     }
 
-    function mint(
-        DepositItem calldata depositItem,
-        bytes calldata signature,
-        uint256 lzGasFee,
-        bool isNativeToken
-    ) public payable {
-        DepositFactoryContract depositFactoryContract = DepositFactoryContract(
-            _factoryContractAddress
-        );
-
-        require(
-            depositFactoryContract.currentStage() != 0,
-            "We have not ready yet!"
-        );
+    function mint(DepositItem calldata depositItem) public payable {
+        require(currentStage != 0, "We have not ready yet!");
 
         require(depositItem.sellerAddress == _sellerAddress, "Invalid seller!");
 
@@ -111,7 +85,7 @@ contract DepositContract {
 
         require(depositItem.deadline <= deadline, "Invalid deadline!");
 
-        if (depositFactoryContract.currentStage() == 1) {
+        if (currentStage == 1) {
             require(whiteList[msg.sender], "You are not in white list!");
             require(
                 depositItem.mintPrice == whiteListMintPrice,
@@ -121,9 +95,41 @@ contract DepositContract {
             require(depositItem.mintPrice == mintPrice, "Invalid mint price!");
         }
 
-        DepositFactoryContract(_factoryContractAddress).depositTokenByClient{
-            value: msg.value
-        }(depositItem, signature, lzGasFee, isNativeToken);
+        uint256 value = depositItem.mintPrice * depositItem.mintQuantity;
+
+        if (tokenAddress == address(0)) {
+            require(msg.value >= value, "Insufficient native token balances");
+        }
+
+        DepositFactoryContract depositFactoryContract = DepositFactoryContract(
+            _factoryContractAddress
+        );
+
+        uint256 platformFeeMintAmount = depositFactoryContract
+            .calcMintFeeAmount(value);
+        uint256 userProfit = value - platformFeeMintAmount;
+
+        if (tokenAddress == address(0)) {
+            Address.sendValue(
+                payable(depositFactoryContract.getAdminWallet()),
+                platformFeeMintAmount
+            );
+            Address.sendValue(
+                payable(depositItem.sellerAddress),
+                value - platformFeeMintAmount
+            );
+        } else {
+            IERC20(tokenAddress).safeTransferFrom(
+                tx.origin,
+                depositFactoryContract.getAdminWallet(),
+                platformFeeMintAmount
+            );
+            IERC20(tokenAddress).safeTransferFrom(
+                tx.origin,
+                depositItem.sellerAddress,
+                userProfit
+            );
+        }
 
         _mintedTokens += depositItem.mintQuantity;
     }
@@ -185,6 +191,58 @@ contract DepositContract {
             for (uint256 i = 0; i < buyers.length; i++) {
                 whiteList[buyers[i]] = false;
             }
+        }
+    }
+
+    function changeStage(uint256 stage) public onlyPermissioned {
+        currentStage = stage;
+    }
+
+    function getFactoryContractAddress() public view returns (address) {
+        return _factoryContractAddress;
+    }
+
+    function withdraw(address token, uint256 value) external {
+        require(
+            msg.sender == _factoryContractAddress,
+            "Caller is not a factory contract"
+        );
+        DepositFactoryContract depositFactoryContract = DepositFactoryContract(
+            _factoryContractAddress
+        );
+        if (token == address(0)) {
+            Address.sendValue(
+                payable(depositFactoryContract.getAdminWallet()),
+                value
+            );
+        } else {
+            IERC20(token).safeTransferFrom(
+                address(this),
+                depositFactoryContract.getAdminWallet(),
+                value
+            );
+        }
+    }
+
+    function withdrawAll(address token) external {
+        require(
+            msg.sender == _factoryContractAddress,
+            "Caller is not a factory contract"
+        );
+        DepositFactoryContract depositFactoryContract = DepositFactoryContract(
+            _factoryContractAddress
+        );
+        if (token == address(0)) {
+            Address.sendValue(
+                payable(depositFactoryContract.getAdminWallet()),
+                address(this).balance
+            );
+        } else {
+            IERC20(token).safeTransferFrom(
+                address(this),
+                payable(depositFactoryContract.getAdminWallet()),
+                IERC20(token).balanceOf(address(this))
+            );
         }
     }
 }

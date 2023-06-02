@@ -14,22 +14,19 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard {
 
     uint256 private _mintedTokens;
 
-    constructor(
-        string memory tokenURI,
-        address factoryContractAddress
-    ) ERC1155(tokenURI) {
-        baseURI = tokenURI;
-        _grantRole(OWNER_ROLE, tx.origin);
-        _grantRole(FACTORY_CONTRACT_ROLE, factoryContractAddress);
-    }
+    bool public initialized;
+
+    constructor() ERC1155("") {}
 
     function init(
         string memory tokenURI,
         address factoryContractAddress
     ) external {
+        require(!initialized, "Contract is already initialized");
         baseURI = tokenURI;
         _grantRole(OWNER_ROLE, tx.origin);
         _grantRole(FACTORY_CONTRACT_ROLE, factoryContractAddress);
+        initialized = true;
     }
 
     function supportsInterface(

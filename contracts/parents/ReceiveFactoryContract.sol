@@ -103,7 +103,7 @@ contract ReceiveFactoryContract is
     function createPayContractBySeller(
         uint256 maxAcceptedValue,
         bool forwarded,
-        address tokenAddress,
+        address[] memory tokenAddresses,
         uint16 dstChainId,
         bytes calldata adapterParams
     ) public payable {
@@ -111,7 +111,8 @@ contract ReceiveFactoryContract is
             1,
             maxAcceptedValue,
             forwarded,
-            tokenAddress
+            tokenAddresses,
+            msg.sender
         );
 
         (uint nativeFee, uint zroFee) = estimateFee(

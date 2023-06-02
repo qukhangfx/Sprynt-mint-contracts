@@ -1,16 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.17;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
-import "@openzeppelin/contracts/utils/cryptography/draft-EIP712.sol";
-import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
 import {DepositItem} from "../library/Structs.sol";
-import "../library/Domain.sol";
 import "@layerzerolabs/solidity-examples/contracts/lzApp/NonblockingLzApp.sol";
 import "../childs/SimplePay.sol";
 
@@ -23,7 +17,6 @@ import "hardhat/console.sol";
 contract DepositFactoryContract is
     AccessControl,
     NonblockingLzApp,
-    EIP712,
     ReentrancyGuard,
     Pausable,
     CloneFactory
@@ -33,31 +26,22 @@ contract DepositFactoryContract is
     bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
     bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
 
-    uint96 public platformFee = 250; // 2.5% platform fee
-    address private _adminWallet;
-    address private immutable _acceptToken;
+    uint96 public platformFeeMint = 250; // 2.5% platform fee
+    uint96 public platformFeePay = 250; // 2.5% platform fee
+    address public adminWallet;
     address private _masterDepositContract;
     address private _masterPayContract;
 
-    mapping(address => uint256) private _accountNonces;
-
     mapping(address => bool) private _depositContracts;
+    mapping(address => bool) private _payContracts;
     mapping(address => address) public payContracts;
 
     mapping(uint16 => mapping(address => address))
         public deployedDepositContracts;
 
-    address[] private _depositContractsList;
-
-    uint256 public currentStage = 0;
-
     event SetAdminWallet(address adminWallet);
-    event SetPlatformFee(uint96 platformFee);
-    event DepositedToken(
-        DepositItem depositItem,
-        uint256 lzGasFee,
-        bool isNativeToken
-    );
+    event SetPlatformFeeMint(uint96 platformFeeMint);
+    event SetPlatformFeePay(uint96 platformFeePay);
     event MasterDepositContractCreated(address masterDepositContractAddress);
     event DepositContractCreated(address depositContractAddress);
     event DepositContractUpdated(
@@ -74,20 +58,11 @@ contract DepositFactoryContract is
 
     constructor(
         address _layerZeroEndpoint,
-        address acceptToken,
         address owner,
-        address adminWallet,
+        address adminWallet_,
         address depositRoleAccount
-    )
-        NonblockingLzApp(_layerZeroEndpoint)
-        EIP712("DepositFactoryContract", "1.0.0")
-    {
-        require(
-            acceptToken != address(0),
-            "AcceptToken cannot be zero address"
-        );
-        _acceptToken = acceptToken;
-        _adminWallet = adminWallet;
+    ) NonblockingLzApp(_layerZeroEndpoint) {
+        adminWallet = adminWallet_;
         _setupRole(OWNER_ROLE, owner);
         _setupRole(VALIDATOR_ROLE, depositRoleAccount);
     }
@@ -177,10 +152,35 @@ contract DepositFactoryContract is
                 whiteList_
             );
             _depositContracts[clone] = true;
-            _depositContractsList.push(clone);
             deployedDepositContracts[dstChainId][sellerAddress] = clone;
             emit DepositContractCreated(clone);
         }
+    }
+
+    function createPayContractBySeller(
+        uint256 maxAcceptedValue,
+        bool forwarded,
+        address[] memory tokenAddresses,
+        address sellerAddress
+    ) public {
+        require(
+            payContracts[sellerAddress] == address(0),
+            "already created pay contract."
+        );
+        require(
+            _masterPayContract != address(0),
+            "master pay contract address is not set."
+        );
+        address clone = createClone(_masterPayContract);
+        SimplePay(clone).init(
+            maxAcceptedValue,
+            forwarded,
+            tokenAddresses,
+            sellerAddress
+        );
+        payContracts[sellerAddress] = address(clone);
+        _payContracts[clone] = true;
+        emit SimplePayContractCreated(address(clone));
     }
 
     function _nonblockingLzReceive(
@@ -193,26 +193,27 @@ contract DepositFactoryContract is
         assembly {
             taskType := mload(add(_payload, 32))
         }
+
         if (taskType == 1) {
             (
+                uint256 task,
                 uint256 maxAcceptedValue,
                 bool forwarded,
-                address tokenAddress
-            ) = abi.decode(_payload, (uint256, bool, address));
-            require(
-                payContracts[msg.sender] == address(0),
-                "already created pay contract."
+                address[] memory tokenAddresses_,
+                address sellerAddress
+            ) = abi.decode(
+                    _payload,
+                    (uint256, uint256, bool, address[], address)
+                );
+            createPayContractBySeller(
+                maxAcceptedValue,
+                forwarded,
+                tokenAddresses_,
+                sellerAddress
             );
-            require(
-                _masterPayContract != address(0),
-                "master pay contract address is not set."
-            );
-            address clone = createClone(_masterPayContract);
-            SimplePay(clone).init(maxAcceptedValue, forwarded, tokenAddress);
-            payContracts[msg.sender] = address(clone);
-            emit SimplePayContractCreated(address(clone));
         } else if (taskType == 2) {
             (
+                uint256 task,
                 address sellerAddress,
                 address tokenAddress,
                 uint16 dstChainId,
@@ -226,6 +227,7 @@ contract DepositFactoryContract is
             ) = abi.decode(
                     _payload,
                     (
+                        uint256,
                         address,
                         address,
                         uint16,
@@ -254,11 +256,6 @@ contract DepositFactoryContract is
         }
     }
 
-    function getLatestDepositContract() external view returns (address) {
-        require(_depositContractsList.length > 0, "No items in the mapping");
-        return _depositContractsList[_depositContractsList.length - 1];
-    }
-
     function supportsInterface(
         bytes4 interfaceId
     ) public view virtual override(AccessControl) returns (bool) {
@@ -285,15 +282,38 @@ contract DepositFactoryContract is
             adminWallet_ != address(0),
             "adminWallet address must not be zero address"
         );
-        _adminWallet = adminWallet_;
+        adminWallet = adminWallet_;
         emit SetAdminWallet(adminWallet_);
     }
 
-    function setPlatformFee(uint96 platformFee_) external onlyRole(OWNER_ROLE) {
-        require(platformFee_ > 0, "platformFee must be greater than zero");
-        require(platformFee_ < 10000, "platformFee must be less than 100%");
-        platformFee = platformFee_;
-        emit SetPlatformFee(platformFee_);
+    function setPlatformFeeMint(
+        uint96 platformFeeMint_
+    ) external onlyRole(OWNER_ROLE) {
+        require(
+            platformFeeMint_ > 0,
+            "platformFeeMint must be greater than zero"
+        );
+        require(
+            platformFeeMint_ < 10000,
+            "platformFeeMint must be less than 100%"
+        );
+        platformFeeMint = platformFeeMint_;
+        emit SetPlatformFeeMint(platformFeeMint_);
+    }
+
+    function setPlatformFeePay(
+        uint96 platformFeePay_
+    ) external onlyRole(OWNER_ROLE) {
+        require(
+            platformFeePay_ > 0,
+            "platformFeePay must be greater than zero"
+        );
+        require(
+            platformFeePay_ < 10000,
+            "platformFeePay must be less than 100%"
+        );
+        platformFeePay = platformFeePay_;
+        emit SetPlatformFeePay(platformFeePay_);
     }
 
     modifier onlyContract() {
@@ -304,64 +324,12 @@ contract DepositFactoryContract is
         _;
     }
 
-    function depositTokenByClient(
-        DepositItem calldata depositItem,
-        bytes calldata signature,
-        uint256 lzGasFee,
-        bool isNativeToken
-    ) external payable nonReentrant whenNotPaused onlyContract {
+    modifier onlyPay() {
         require(
-            block.timestamp <= depositItem.deadline,
-            "Invalid expiration in deposit"
+            _payContracts[msg.sender],
+            "Only pay contracts created by this factory can call the function!"
         );
-        require(depositItem.isMintAvailable, "Mint is not available");
-        if (isNativeToken) {
-            require(
-                msg.value >=
-                    lzGasFee + depositItem.mintPrice * depositItem.mintQuantity,
-                "Insufficient native token balances"
-            );
-        } else {
-            require(msg.value >= lzGasFee, "Insufficient ERC20 token balances");
-        }
-        require(
-            _verify(
-                _hashTypedDataV4(
-                    Domain._hashDepositItem(
-                        depositItem,
-                        _accountNonces[tx.origin]
-                    )
-                ),
-                signature
-            ),
-            "Invalid signature"
-        );
-        unchecked {
-            ++_accountNonces[tx.origin];
-        }
-        uint256 platformFeeAmount = _calcFeeAmount(
-            depositItem.mintPrice,
-            platformFee
-        );
-        uint256 userProfit = depositItem.mintPrice - platformFeeAmount;
-
-        if (isNativeToken) {
-            Address.sendValue(payable(_adminWallet), platformFeeAmount);
-            Address.sendValue(payable(depositItem.sellerAddress), userProfit);
-        } else {
-            IERC20(_acceptToken).safeTransferFrom(
-                tx.origin,
-                _adminWallet,
-                platformFeeAmount
-            );
-            IERC20(_acceptToken).safeTransferFrom(
-                tx.origin,
-                depositItem.sellerAddress,
-                userProfit
-            );
-        }
-
-        emit DepositedToken(depositItem, lzGasFee, isNativeToken);
+        _;
     }
 
     function estimateFee(
@@ -395,11 +363,12 @@ contract DepositFactoryContract is
         }
     }
 
-    function _verify(
-        bytes32 digest,
-        bytes memory signature
-    ) internal view returns (bool) {
-        return hasRole(VALIDATOR_ROLE, ECDSA.recover(digest, signature));
+    function calcPayFeeAmount(uint256 amount) public view returns (uint256) {
+        return _calcFeeAmount(amount, platformFeePay);
+    }
+
+    function calcMintFeeAmount(uint256 amount) public view returns (uint256) {
+        return _calcFeeAmount(amount, platformFeeMint);
     }
 
     function pause() public virtual onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -474,7 +443,109 @@ contract DepositFactoryContract is
         return deployedDepositContracts[dstChainId][seller];
     }
 
-    function changeStage(uint256 stage) external onlyRole(OWNER_ROLE) {
-        currentStage = stage;
+    function getPayContract(address seller) public view returns (address) {
+        return payContracts[seller];
+    }
+
+    function updateSupportTokenOfPayContract(
+        address supportedTokenAddress_,
+        bool isSupported,
+        address seller
+    ) external onlyPay {
+        require(
+            payContracts[seller] != address(0),
+            "pay contract is not created."
+        );
+
+        SimplePay(payContracts[seller]).updateSupportToken(
+            supportedTokenAddress_,
+            isSupported
+        );
+    }
+
+    function changeStage(
+        address depositContractAddress,
+        uint256 stage
+    ) public onlyPermissioned {
+        DepositContract(depositContractAddress).changeStage(stage);
+    }
+
+    function getAdminWallet() external view returns (address) {
+        return adminWallet;
+    }
+
+    function withdraw(
+        address token,
+        uint256 value
+    ) external onlyRole(OWNER_ROLE) {
+        if (token == address(0)) {
+            Address.sendValue(payable(adminWallet), value);
+        } else {
+            IERC20(token).safeTransferFrom(address(this), adminWallet, value);
+        }
+    }
+
+    function withdrawAll(address token) external onlyRole(OWNER_ROLE) {
+        if (token == address(0)) {
+            Address.sendValue(payable(adminWallet), address(this).balance);
+        } else {
+            IERC20(token).safeTransferFrom(
+                address(this),
+                payable(adminWallet),
+                IERC20(token).balanceOf(address(this))
+            );
+        }
+    }
+
+    function withdrawPayContract(
+        address token,
+        uint256 value,
+        address seller
+    ) external onlyRole(OWNER_ROLE) {
+        require(
+            payContracts[seller] != address(0),
+            "pay contract is not created."
+        );
+        SimplePay(payContracts[seller]).withdraw(token, value);
+    }
+
+    function withdrawAllPayContract(
+        address token,
+        address seller
+    ) external onlyRole(OWNER_ROLE) {
+        require(
+            payContracts[seller] != address(0),
+            "pay contract is not created."
+        );
+        SimplePay(payContracts[seller]).withdrawAll(token);
+    }
+
+    function withdrawDepositContract(
+        address token,
+        uint256 value,
+        uint16 dstChainId,
+        address seller
+    ) external onlyRole(OWNER_ROLE) {
+        require(
+            deployedDepositContracts[dstChainId][seller] != address(0),
+            "deposit contract is not created."
+        );
+        DepositContract(deployedDepositContracts[dstChainId][seller]).withdraw(
+            token,
+            value
+        );
+    }
+
+    function withdrawAllDepositContract(
+        address token,
+        uint16 dstChainId,
+        address seller
+    ) external onlyRole(OWNER_ROLE) {
+        require(
+            deployedDepositContracts[dstChainId][seller] != address(0),
+            "deposit contract is not created."
+        );
+        DepositContract(deployedDepositContracts[dstChainId][seller])
+            .withdrawAll(token);
     }
 }
