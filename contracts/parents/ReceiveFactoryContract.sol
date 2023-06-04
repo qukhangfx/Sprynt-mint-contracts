@@ -1,76 +1,118 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 import "@layerzerolabs/solidity-examples/contracts/lzApp/NonblockingLzApp.sol";
-import "@layerzerolabs/solidity-examples/contracts/util/BytesLib.sol";
-import "../childs/PolarysNftContract.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
+import "../childs/ERC1155.sol";
+import {CloneFactory} from "../library/CloneFactory.sol";
 
-import "../interfaces/IPolarysNftContract.sol";
 import "hardhat/console.sol";
 
-contract ReceiveFactoryContract is NonblockingLzApp {
-    using BytesLib for bytes;
+contract ReceiveFactoryContract is
+    NonblockingLzApp,
+    CloneFactory,
+    AccessControl
+{
+    bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
+    bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
 
     event CreatedNftContract(
-        string name,
-        string symbol,
         string tokenUri,
-        uint256 totalSupply,
         address seller,
         address nftContractAddress
     );
-    event MintedNfts(
-        address nftContractAddress,
-        address clientAddress,
+
+    event CreatedDepositContract(
         address sellerAddress,
-        uint256 mintQuantity
+        address tokenAddress,
+        uint16 dstChainId,
+        uint256 mintPrice,
+        uint256 whiteListMintPrice,
+        uint256 minMintQuantity,
+        uint256 maxMintQuantity,
+        uint256 totalSupply,
+        uint256 deadline
     );
 
-    mapping(address => address) public nftContracts; // seller=>nftContract address
+    mapping(address => address) public nftContracts; // seller => nftContract address
+    address private _masterNftContractAddress;
+
+    modifier onlyValidator() {
+        require(
+            hasRole(VALIDATOR_ROLE, msg.sender),
+            "Caller is not a validator"
+        );
+        _;
+    }
+
+    function setupValidatorRole(address account) external onlyOwner {
+        _grantRole(VALIDATOR_ROLE, account);
+    }
+
+    function revokeValidatorRole(address account) external onlyOwner {
+        _revokeRole(VALIDATOR_ROLE, account);
+    }
 
     constructor(
         address _layerZeroEndpoint
     ) NonblockingLzApp(_layerZeroEndpoint) {}
 
-    function createNftContractBySeller(
-        string calldata name,
-        string calldata symbol,
-        string calldata tokenUri,
-        uint256 totalSupply
-    ) external {
+    function createNftContractBySeller(string calldata tokenUri) external {
         require(
             nftContracts[msg.sender] == address(0),
             "already created nft contract."
         );
-        PolarysNftContract newNftContract = new PolarysNftContract(
-            name,
-            symbol,
-            tokenUri,
-            totalSupply,
-            address(this)
-        );
-        nftContracts[msg.sender] = address(newNftContract);
 
-        emit CreatedNftContract(
-            name,
-            symbol,
-            tokenUri,
-            totalSupply,
-            msg.sender,
-            address(newNftContract)
+        require(
+            _masterNftContractAddress != address(0),
+            "master nft contract address is not set."
         );
+
+        address clone = createClone(_masterNftContractAddress);
+        ERC1155Contract(clone).init(tokenUri, address(this));
+        nftContracts[msg.sender] = clone;
+        emit CreatedNftContract(tokenUri, msg.sender, clone);
+    }
+
+    function setMasterNftContractAddress(
+        address masterNftContractAddress
+    ) external onlyOwner {
+        _masterNftContractAddress = masterNftContractAddress;
+    }
+
+    function mint(
+        address seller,
+        address to,
+        uint256 amount,
+        bytes memory data
+    ) public onlyValidator {
+        require(
+            nftContracts[seller] != address(0),
+            "nft contract is not created."
+        );
+        if (amount == 1) {
+            ERC1155Contract(nftContracts[seller]).mintToken(to, data);
+        } else {
+            ERC1155Contract(nftContracts[seller]).mintBatchToken(
+                to,
+                amount,
+                data
+            );
+        }
     }
 
     function createPayContractBySeller(
         uint256 maxAcceptedValue,
         bool forwarded,
-        address tokenAddress,
+        address[] memory tokenAddresses,
         uint16 dstChainId,
         bytes calldata adapterParams
     ) public payable {
         bytes memory encodedPayload = abi.encode(
+            1,
             maxAcceptedValue,
             forwarded,
-            tokenAddress
+            tokenAddresses,
+            msg.sender
         );
 
         (uint nativeFee, uint zroFee) = estimateFee(
@@ -92,27 +134,55 @@ contract ReceiveFactoryContract is NonblockingLzApp {
         );
     }
 
-    function _nonblockingLzReceive(
-        uint16,
-        bytes memory,
-        uint64,
-        bytes memory _payload
-    ) internal override {
-        (address clientAddress, uint256 mintQuantity, address seller) = abi
-            .decode(_payload, (address, uint256, address));
-        address nftContractAddress = nftContracts[seller];
-        require(nftContractAddress != address(0), "NftContract is not created");
-        IPolarysNftContract(nftContractAddress).mintToken(
-            clientAddress,
-            mintQuantity
+    function createDepositContractBySeller(
+        uint16 dstChainId,
+        address sellerAddress,
+        address tokenAddress,
+        uint16 depositContractDstChainId,
+        uint256 mintPrice,
+        uint256 whiteListMintPrice,
+        uint256 minMintQuantity,
+        uint256 maxMintQuantity,
+        uint256 totalSupply,
+        uint256 deadline,
+        address[] memory whiteList,
+        bytes calldata adapterParams
+    ) external payable {
+        bytes memory encodedPayload = abi.encode(
+            2,
+            sellerAddress,
+            tokenAddress,
+            depositContractDstChainId,
+            mintPrice,
+            whiteListMintPrice,
+            minMintQuantity,
+            maxMintQuantity,
+            totalSupply,
+            deadline,
+            whiteList
         );
+        (uint nativeFee, uint zroFee) = estimateFee(
+            dstChainId,
+            false,
+            adapterParams,
+            encodedPayload
+        );
+        require(msg.value >= nativeFee, "Insufficient fee");
 
-        emit MintedNfts(
-            nftContractAddress,
-            clientAddress,
-            seller,
-            mintQuantity
+        _lzSend(
+            dstChainId,
+            encodedPayload,
+            payable(tx.origin),
+            address(0x0),
+            adapterParams,
+            nativeFee
         );
+    }
+
+    function getNftContractsOfAccount(
+        address owner
+    ) public view returns (address) {
+        return nftContracts[owner];
     }
 
     function estimateFee(
@@ -130,4 +200,11 @@ contract ReceiveFactoryContract is NonblockingLzApp {
                 _adapterParams
             );
     }
+
+    function _nonblockingLzReceive(
+        uint16 _srcChainId,
+        bytes memory _srcAddress,
+        uint64 _nonce,
+        bytes memory _payload
+    ) internal virtual override {}
 }

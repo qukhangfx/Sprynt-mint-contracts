@@ -1,242 +1,589 @@
-import { expect } from 'chai';
-import { ethers, network } from 'hardhat';
-const hre = require("hardhat");
+import { ethers } from "hardhat";
+import { expect } from "chai";
+import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import * as helpers from "@nomicfoundation/hardhat-network-helpers";
-import { parseUnits, formatUnits, parseEther } from "ethers/lib/utils";
-import { DepositFactoryContract, LZEndpointMock, ReceiveFactoryContract, PolarysNftContract, TestToken } from "../typechain-types";
-import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers';
 
 import {
-  DepositItemData,
-  getBigNumber,
-  signDepositItemData,
-} from './utils'
-import { BigNumber, Contract, Signer } from 'ethers';
+	DepositFactoryContract,
+	ReceiveFactoryContract,
+	ERC1155,
+	LZEndpointMock,
+	TestToken,
+	DepositContract,
+} from "../typechain-types";
 
-describe('Test multichain minting engine', () => {
-  let depositFactoryContract: DepositFactoryContract
-  let receiveFactoryContract: ReceiveFactoryContract
-  let polarysNftContract: PolarysNftContract
-  let lzEndpointMockSrc: LZEndpointMock
-  let lzEndpointMockDst: LZEndpointMock
-  let testTokenContract: TestToken
-  let owner: SignerWithAddress
-  let adminWallet: SignerWithAddress
-  let seller: SignerWithAddress
-  let client: SignerWithAddress
-  let depositRoleAccount: SignerWithAddress
-  
-  let ownerAddress: string
-  let adminWalletAddress: string
-  let sellerAddress: string
-  let clientAddress: string
-  let depositRoleAddress: string
+import { getBigNumber, signDepositItemData } from "./utils";
+import { formatUnits } from "ethers/lib/utils";
+import { ownerWindow } from "@mui/material";
 
-  const nftName = "Polarys test NFTS";
-  const nftSymbol = "PTN";
-  const tokenURI = "https://bafybeidyj2ases25wrcwyisxsbnfo6qe7oe4re5ql77uspoo6d33benknq.ipfs.nftstorage.link/";
-  const totalSupply = 100;
-  
-  // use this chainId
-  const chainIdSrc = 1;
-  const chainIdDst = 2;
-  const depositTokenDecimals = 6;
-  let backendNonce = 0;
+describe("Test multichain minting engine", () => {
+	let testTokenContract: TestToken;
+	let depositContract: DepositContract;
+	let depositFactoryContract: DepositFactoryContract;
+	let receiveFactoryContract: ReceiveFactoryContract;
+	let depositFactoryContractB: DepositFactoryContract;
+	let receiveFactoryContractB: ReceiveFactoryContract;
+	let NftContract: ERC1155;
+	let NftContractB: ERC1155;
+	let lzEndpointMockSrc: LZEndpointMock;
+	let lzEndpointMockDst: LZEndpointMock;
 
-  before(async () => {
-    [
-      owner,
-      adminWallet,
-      seller,
-      client,
-      depositRoleAccount
-    ] = await ethers.getSigners()
-    ownerAddress = await owner.getAddress()
-    adminWalletAddress = await adminWallet.getAddress()
-    sellerAddress = await seller.getAddress()
-    clientAddress = await client.getAddress()
-    depositRoleAddress = await depositRoleAccount.getAddress()
-    console.log('===================Deploying Contract=====================')
+	let owner: SignerWithAddress;
+	let adminWallet: SignerWithAddress;
+	let sellerWallet: SignerWithAddress;
+	let clientWallet: SignerWithAddress;
+	let validatorRoleAccount: SignerWithAddress;
 
+	let ownerAddress: string;
+	let adminWalletAddress: string;
+	let sellerWalletAddress: string;
+	let clientWalletAddress: string;
+	let validatorRoleAccountAddress: string;
 
-    // create a LayerZero Endpoint mock for testing
-    const LayerZeroEndpointMock = await ethers.getContractFactory("LZEndpointMock")
-    lzEndpointMockSrc = await LayerZeroEndpointMock.deploy(chainIdSrc)
-    await lzEndpointMockSrc.deployed();
-    lzEndpointMockDst = await LayerZeroEndpointMock.deploy(chainIdDst)
-    await lzEndpointMockDst.deployed();
-    
-    // create test token contract
-    const testTokenFactory = await ethers.getContractFactory("TestToken")
-    testTokenContract = (await testTokenFactory.deploy("test", "TTT", depositTokenDecimals)) as TestToken
-    await testTokenContract.deployed();
+	const nftName = "Polarys test NFTs";
+	const nftSymbol = "PNT";
+	const tokenURI =
+		"https://bafybeidyj2ases25wrcwyisxsbnfo6qe7oe4re5ql77uspoo6d33benknq.ipfs.nftstorage.link/";
+	const totalSupply = 100;
 
-    // admin deploys depositFactoryContract
-    const depositFactory = await ethers.getContractFactory("DepositFactoryContract")
-    depositFactoryContract = (await depositFactory.deploy(
-      lzEndpointMockSrc.address,
-      testTokenContract.address,
-      ownerAddress,
-      adminWalletAddress,
-      depositRoleAddress
-    )) as DepositFactoryContract
-    await depositFactoryContract.deployed()
-    console.log('DepositFactoryContract deployed: ', depositFactoryContract.address)
+	const erc20TokenName = "TestToken";
+	const erc20TokenSymbol = "TT";
+	const depositTokenDecimals = 6;
 
-    const receiveFactory = await ethers.getContractFactory("ReceiveFactoryContract")
-    receiveFactoryContract = (await receiveFactory.deploy(
-      lzEndpointMockDst.address
-    )) as ReceiveFactoryContract
-    await receiveFactoryContract.deployed()
-    console.log('ReceiveFactoryContract deployed: ', receiveFactoryContract.address)
+	const chainIdSrc = 1;
+	const chainIdDst = 2;
 
-    await lzEndpointMockSrc.setDestLzEndpoint(receiveFactoryContract.address, lzEndpointMockDst.address)
-    await lzEndpointMockDst.setDestLzEndpoint(depositFactoryContract.address, lzEndpointMockSrc.address)
+	let backendNonce = 0;
 
-    depositFactoryContract.setTrustedRemote(
-      chainIdDst,
-      ethers.utils.solidityPack(["address", "address"], [receiveFactoryContract.address, depositFactoryContract.address])
-    )
-    
-    receiveFactoryContract.setTrustedRemote(
-      chainIdSrc,
-      ethers.utils.solidityPack(["address", "address"], [depositFactoryContract.address, receiveFactoryContract.address])
-    )
+	before(async () => {
+		[owner, adminWallet, sellerWallet, clientWallet, validatorRoleAccount] =
+			await ethers.getSigners();
 
-    // admin mint test tokens to the client
-    await testTokenContract.mint(clientAddress, getBigNumber(10000000, depositTokenDecimals));
+		ownerAddress = await owner.getAddress();
+		adminWalletAddress = await adminWallet.getAddress();
+		sellerWalletAddress = await sellerWallet.getAddress();
+		clientWalletAddress = await clientWallet.getAddress();
+		validatorRoleAccountAddress = await validatorRoleAccount.getAddress();
 
-    // seller creates nft contracts
-    const receiveFactoryContractTransaction = await(await receiveFactoryContract.connect(seller).createNftContractBySeller(
-      nftName,
-      nftSymbol,
-      tokenURI,
-      totalSupply
-    )).wait();
+		// Deploy TestToken contract
+		const TestTokenFactory = await ethers.getContractFactory("TestToken");
+		testTokenContract = (await TestTokenFactory.deploy(
+			erc20TokenName,
+			erc20TokenSymbol,
+			depositTokenDecimals
+		)) as TestToken;
+		await testTokenContract.deployed();
+		console.log("TestToken deployed to:", testTokenContract.address);
 
-    if (receiveFactoryContractTransaction.status == 1) {
-      const events = receiveFactoryContractTransaction.events;
-      if (events && events.length) {
-        for (const eventObject of events) {
-          if (eventObject.event == "CreatedNftContract") {
-            const nftContractAddress = eventObject.args["nftContractAddress"];
-            polarysNftContract = (
-              await ethers.getContractAt(
-                'PolarysNftContract', 
-                nftContractAddress
-                )
-              ) as PolarysNftContract;
-            console.log(`PolarysNftContract is deployed at: ${nftContractAddress}`);
-            break;
-          }
-        }
-      }
-    } else {
-      console.log("error creating PolarysNftContract")
-    }
+		// Deploy LZEndpointMock contract
+		const LZEndpointMockFactory = await ethers.getContractFactory(
+			"LZEndpointMock"
+		);
 
-  })
+		lzEndpointMockSrc = (await LZEndpointMockFactory.deploy(
+			chainIdSrc
+		)) as LZEndpointMock;
+		await lzEndpointMockSrc.deployed();
 
-  describe('Client test', async () => {
-    it('client deposit ERC20 tokens', async () => {
-      const currentTimestamp = await helpers.time.latest();
-      const deadline = currentTimestamp + 10 * 60;
-      const depositItemData = {
-        mintPrice: getBigNumber(1000, depositTokenDecimals),
-        mintQuantity: 10,
-        sellerAddress: sellerAddress,
-        dstChainId: chainIdDst,
-        isMintAvailable: true,
-        nonce: backendNonce,
-        deadline: deadline,
-      };
-      const {['nonce']: nonce, ...depositItem} = depositItemData;
-      const signature = signDepositItemData(
-        depositItemData,
-        depositFactoryContract,
-        depositRoleAccount
-      );
-      let adapterParams = ethers.utils.solidityPack(['uint16', 'uint256'], [1, 2000000])
-      const _payload = ethers.utils.defaultAbiCoder.encode(
-        ['address', 'uint256', 'address'],
-        [clientAddress, depositItemData.mintQuantity, depositItemData.sellerAddress]
-        // [ethers.constants.AddressZero, 0, ethers.constants.AddressZero]
-      )
-      const estimatedFee = await lzEndpointMockSrc.estimateFees(chainIdDst, depositFactoryContract.address, _payload, false, adapterParams)
-      console.log('estimateFee is: ', formatUnits(estimatedFee.nativeFee))
-      await testTokenContract.connect(client).approve(
-        depositFactoryContract.address, 
-        depositItemData.mintPrice
-      );
-      expect(formatUnits(await testTokenContract.balanceOf(clientAddress), depositTokenDecimals)).to.be.equal("10000000.0") // initial value
-      expect(formatUnits(await testTokenContract.balanceOf(adminWalletAddress), depositTokenDecimals)).to.be.equal("0.0") // initial value
-      expect(formatUnits(await testTokenContract.balanceOf(sellerAddress), depositTokenDecimals)).to.be.equal("0.0") // initial value
+		lzEndpointMockDst = (await LZEndpointMockFactory.deploy(
+			chainIdDst
+		)) as LZEndpointMock;
+		await lzEndpointMockDst.deployed();
 
-      await expect(depositFactoryContract.connect(client).depositTokenByClient(
-        depositItem,
-        signature,
-        estimatedFee.nativeFee,
-        false,
-        {value: estimatedFee.nativeFee}
-      )).to.be.not.reverted;
-      console.log("admin wallet balance is: ", formatUnits(await testTokenContract.balanceOf(adminWalletAddress), depositTokenDecimals));
-      expect(formatUnits(await testTokenContract.balanceOf(adminWalletAddress), depositTokenDecimals)).to.be.equal("25.0") // initial value
-      expect(formatUnits(await testTokenContract.balanceOf(sellerAddress), depositTokenDecimals)).to.be.equal("975.0") // initial value
-      const nftBalance = await polarysNftContract.balanceOf(clientAddress);
-      console.log(`client has ${nftBalance} NFTs`);
-    })
+		// Deploy DepositFactory contract
+		const DepositFactoryContractFactory = await ethers.getContractFactory(
+			"DepositFactoryContract"
+		);
 
-    it('client deposit native tokens', async () => {
-      backendNonce += 1;
-      const currentTimestamp = await helpers.time.latest();
-      const deadline = currentTimestamp + 10 * 60;
-      const depositItemData = {
-        mintPrice: getBigNumber(100),
-        mintQuantity: 20,
-        sellerAddress: sellerAddress,
-        dstChainId: chainIdDst,
-        isMintAvailable: true,
-        nonce: backendNonce,
-        deadline: deadline,
-      };
-      const {['nonce']: nonce, ...depositItem} = depositItemData;
-      const signature = signDepositItemData(
-        depositItemData,
-        depositFactoryContract,
-        depositRoleAccount
-      );
-      let adapterParams = ethers.utils.solidityPack(['uint16', 'uint256'], [1, 2000000])
-      const _payload = ethers.utils.defaultAbiCoder.encode(
-        ['address', 'uint256', 'address'],
-        [clientAddress, depositItemData.mintQuantity, depositItemData.sellerAddress]
-        // [ethers.constants.AddressZero, 0, ethers.constants.AddressZero]
-      )
-      const estimatedFee = await lzEndpointMockSrc.estimateFees(chainIdDst, depositFactoryContract.address, _payload, false, adapterParams)
-      console.log('estimateFee is: ', formatUnits(estimatedFee.nativeFee))
-      await testTokenContract.connect(client).approve(
-        depositFactoryContract.address, 
-        depositItemData.mintPrice
-      );
-      console.log("client balance before tx: ", formatUnits(await client.getBalance()));
-      console.log("adminWallet balance before tx: ", formatUnits(await adminWallet.getBalance()));
-      console.log("seller balance before tx: ", formatUnits(await seller.getBalance()));
-      await expect(
-        depositFactoryContract
-        .connect(client)
-        .depositTokenByClient(
-          depositItem,
-          signature,
-          estimatedFee.nativeFee,
-          true,
-          {value: estimatedFee.nativeFee.add(depositItemData.mintPrice) }
-        )
-      ).to.be.not.reverted;
+		depositFactoryContract = (await DepositFactoryContractFactory.deploy(
+			lzEndpointMockSrc.address,
+			ownerAddress,
+			adminWalletAddress,
+			validatorRoleAccountAddress
+		)) as DepositFactoryContract;
+		await depositFactoryContract.deployed();
+		console.log(
+			"DepositFactoryContract deployed to:",
+			depositFactoryContract.address
+		);
 
-      console.log("client balance after tx: ", formatUnits(await client.getBalance()));
-      console.log("adminWallet balance after tx: ", formatUnits(await adminWallet.getBalance()));
-      console.log("seller balance after tx: ", formatUnits(await seller.getBalance()));
-      const nftBalance = await polarysNftContract.balanceOf(clientAddress);
-      console.log(`client has ${nftBalance} NFTs`);
-    })
-  })
+		depositFactoryContractB = (await DepositFactoryContractFactory.deploy(
+			lzEndpointMockDst.address,
+			ownerAddress,
+			adminWalletAddress,
+			validatorRoleAccountAddress
+		)) as DepositFactoryContract;
+		await depositFactoryContractB.deployed();
+		console.log(
+			"DepositFactoryContractB deployed to:",
+			depositFactoryContractB.address
+		);
+
+		// Deploy ReceiveFactory contract
+		const ReceiveFactoryContractFactory = await ethers.getContractFactory(
+			"ReceiveFactoryContract"
+		);
+
+		receiveFactoryContract = (await ReceiveFactoryContractFactory.deploy(
+			lzEndpointMockDst.address
+		)) as ReceiveFactoryContract;
+		await receiveFactoryContract.deployed();
+		console.log(
+			"ReceiveFactoryContract deployed to:",
+			receiveFactoryContract.address
+		);
+
+		receiveFactoryContractB = (await ReceiveFactoryContractFactory.deploy(
+			lzEndpointMockSrc.address
+		)) as ReceiveFactoryContract;
+		await receiveFactoryContractB.deployed();
+		console.log(
+			"ReceiveFactoryContract deployed to:",
+			receiveFactoryContractB.address
+		);
+
+		// setDestLzEndpoint for lzEndpointMockSrc
+		await lzEndpointMockSrc.setDestLzEndpoint(
+			receiveFactoryContract.address,
+			lzEndpointMockDst.address
+		);
+
+		// setDestLzEndpoint for lzEndpointMockSrc
+		await lzEndpointMockSrc.setDestLzEndpoint(
+			receiveFactoryContractB.address,
+			lzEndpointMockSrc.address
+		);
+
+		// setDestLzEndpoint for lzEndpointMockDst
+		await lzEndpointMockDst.setDestLzEndpoint(
+			depositFactoryContract.address,
+			lzEndpointMockSrc.address
+		);
+
+		await lzEndpointMockDst.setDestLzEndpoint(
+			depositFactoryContractB.address,
+			lzEndpointMockDst.address
+		);
+
+		// setTRustedRemote for depositFactoryContract and receiveFactoryContract
+		depositFactoryContract.setTrustedRemote(
+			chainIdDst,
+			ethers.utils.solidityPack(
+				["address", "address"],
+				[receiveFactoryContract.address, depositFactoryContract.address]
+			)
+		);
+
+		depositFactoryContract.setTrustedRemote(
+			chainIdSrc,
+			ethers.utils.solidityPack(
+				["address", "address"],
+				[
+					receiveFactoryContractB.address,
+					depositFactoryContract.address,
+				]
+			)
+		);
+
+		depositFactoryContractB.setTrustedRemote(
+			chainIdDst,
+			ethers.utils.solidityPack(
+				["address", "address"],
+				[
+					receiveFactoryContract.address,
+					depositFactoryContractB.address,
+				]
+			)
+		);
+
+		depositFactoryContractB.setTrustedRemote(
+			chainIdSrc,
+			ethers.utils.solidityPack(
+				["address", "address"],
+				[
+					receiveFactoryContractB.address,
+					depositFactoryContractB.address,
+				]
+			)
+		);
+
+		receiveFactoryContract.setTrustedRemote(
+			chainIdSrc,
+			ethers.utils.solidityPack(
+				["address", "address"],
+				[depositFactoryContract.address, receiveFactoryContract.address]
+			)
+		);
+
+		receiveFactoryContract.setTrustedRemote(
+			chainIdDst,
+			ethers.utils.solidityPack(
+				["address", "address"],
+				[
+					depositFactoryContractB.address,
+					receiveFactoryContract.address,
+				]
+			)
+		);
+
+		receiveFactoryContractB.setTrustedRemote(
+			chainIdSrc,
+			ethers.utils.solidityPack(
+				["address", "address"],
+				[
+					depositFactoryContract.address,
+					receiveFactoryContractB.address,
+				]
+			)
+		);
+
+		receiveFactoryContractB.setTrustedRemote(
+			chainIdDst,
+			ethers.utils.solidityPack(
+				["address", "address"],
+				[
+					depositFactoryContractB.address,
+					receiveFactoryContractB.address,
+				]
+			)
+		);
+
+		// admin mints testToken to clientWallet
+		await testTokenContract.mint(
+			clientWalletAddress,
+			getBigNumber(10000000, depositTokenDecimals)
+		);
+
+		// owner setup ValidatorRole
+		await receiveFactoryContract
+			.connect(owner)
+			.setupValidatorRole(validatorRoleAccountAddress);
+
+		// seller creates NftContract
+		const ERC1155Contract = await ethers.getContractFactory(
+			"ERC1155Contract"
+		);
+		const erc1155Contract = await ERC1155Contract.deploy();
+		await erc1155Contract.deployed();
+		console.log("erc1155Contract deployed to:", erc1155Contract.address);
+		await (
+			await receiveFactoryContract.setMasterNftContractAddress(
+				erc1155Contract.address
+			)
+		).wait();
+
+		await (
+			await receiveFactoryContractB.setMasterNftContractAddress(
+				erc1155Contract.address
+			)
+		).wait();
+
+		// owner deploys depositContract
+		const DepositContract = await ethers.getContractFactory(
+			"DepositContract"
+		);
+		const depositContract = await DepositContract.deploy();
+		await depositContract.deployed();
+		console.log("depositContract deployed to:", depositContract.address);
+
+		await (
+			await depositFactoryContract.setMasterDepositContractAddress(
+				depositContract.address
+			)
+		).wait();
+
+		await (
+			await depositFactoryContractB.setMasterDepositContractAddress(
+				depositContract.address
+			)
+		).wait();
+
+		// owner deploys simplePayContract
+		const SimplePayContract = await ethers.getContractFactory("SimplePay");
+		const simplePayContract = await SimplePayContract.deploy();
+		await simplePayContract.deployed();
+		console.log(
+			"simplePayContract deployed to:",
+			simplePayContract.address
+		);
+
+		await (
+			await depositFactoryContract.setMasterPayContractAddress(
+				simplePayContract.address
+			)
+		).wait();
+
+		await (
+			await depositFactoryContractB.setMasterPayContractAddress(
+				simplePayContract.address
+			)
+		).wait();
+	});
+
+	describe("Test", async () => {
+		it("check decimal", async () => {
+			expect(await testTokenContract.decimals()).to.be.equal(6);
+		});
+
+		it("check modified decimal", async () => {
+			await testTokenContract.setupDecimals(7);
+			expect(await testTokenContract.decimals()).to.be.equal(7);
+		});
+
+		it("check mint fail", async () => {
+			await expect(
+				testTokenContract.mint(clientWalletAddress, 0)
+			).to.be.revertedWith("amount is 0");
+		});
+
+		it("check already created contract", async () => {
+			await receiveFactoryContract
+				.connect(sellerWallet)
+				.createNftContractBySeller(tokenURI);
+			await expect(
+				receiveFactoryContract
+					.connect(sellerWallet)
+					.createNftContractBySeller(tokenURI)
+			).to.be.revertedWith("already created nft contract.");
+		});
+
+		it("check client create pay contract", async () => {
+			const currentTimestamp = await helpers.time.latest();
+			const deadline = currentTimestamp + 10 * 60;
+			const supportedTokens = [testTokenContract.address];
+			let adapterParams = ethers.utils.solidityPack(
+				["uint16", "uint256"],
+				[1, 320_000 + 25_000 * supportedTokens.length]
+			);
+
+			const maxAcceptValue = ethers.utils.parseEther("3");
+			const encodedPayload = ethers.utils.defaultAbiCoder.encode(
+				["uint256", "uint256", "bool", "address[]", "address"],
+				[1, maxAcceptValue, true, supportedTokens, sellerWalletAddress]
+			);
+
+			const gasFee = await lzEndpointMockDst.estimateFees(
+				chainIdSrc,
+				receiveFactoryContract.address,
+				encodedPayload,
+				false,
+				adapterParams
+			);
+
+			const transaction = await (
+				await receiveFactoryContract
+					.connect(sellerWallet)
+					.createPayContractBySeller(
+						maxAcceptValue,
+						true,
+						supportedTokens,
+						chainIdSrc,
+						adapterParams,
+						{ value: gasFee.nativeFee }
+					)
+			).wait();
+
+			const payContractAddress =
+				await depositFactoryContract.payContracts(sellerWalletAddress);
+
+			expect(payContractAddress).not.to.be.equal(
+				"0x0000000000000000000000000000000000000000"
+			);
+
+			console.log("payContractAddress", payContractAddress);
+			const payContract = await ethers.getContractAt(
+				"SimplePay",
+				payContractAddress
+			);
+			expect(await payContract.initialized()).to.be.equal(true);
+			expect(await payContract.maxAcceptedValue()).to.be.equal(
+				maxAcceptValue
+			);
+			expect(await payContract.forwarded()).to.be.equal(true);
+			const supportedTokensFromContract =
+				await payContract.getSupportedTokenList();
+			expect(supportedTokensFromContract.length).to.be.equal(
+				supportedTokens.length
+			);
+			for (let i = 0; i < supportedTokens.length; i++) {
+				expect(supportedTokensFromContract[i]).to.be.equal(
+					supportedTokens[i]
+				);
+			}
+			expect(await payContract.seller()).to.be.equal(sellerWalletAddress);
+
+			await expect(
+				payContract
+					.connect(clientWallet)
+					.pay(
+						testTokenContract.address,
+						ethers.utils.parseEther("0.0001")
+					)
+			).to.be.revertedWith("ERC20: insufficient allowance");
+
+			await expect(
+				payContract
+					.connect(clientWallet)
+					.pay(
+						"0x0000000000000000000000000000000000000000",
+						ethers.utils.parseEther("0.0001"),
+						{
+							value: ethers.utils.parseEther("0.0001"),
+						}
+					)
+			).to.be.fulfilled;
+
+			await testTokenContract
+				.connect(clientWallet)
+				.approve(payContract.address, 100_000);
+
+			const balanceOfClientWallet = await testTokenContract.balanceOf(
+				clientWalletAddress
+			);
+			console.log("balanceOfClientWallet", balanceOfClientWallet);
+
+			await expect(
+				payContract
+					.connect(clientWallet)
+					.pay(testTokenContract.address, 100_000)
+			).to.be.fulfilled;
+		});
+
+		it("check client create deposit contract", async () => {
+			const currentTimestamp = await helpers.time.latest();
+			const deadline = currentTimestamp + 10 * 60;
+			const whiteList = [
+				testTokenContract.address,
+				sellerWalletAddress,
+				clientWalletAddress,
+				adminWalletAddress,
+			];
+			let adapterParams = ethers.utils.solidityPack(
+				["uint16", "uint256"],
+				[1, 350_000 + 25_000 * whiteList.length]
+			);
+
+			const encodedPayload = ethers.utils.defaultAbiCoder.encode(
+				[
+					"uint256",
+					"address",
+					"address",
+					"uint256",
+					"uint256",
+					"uint256",
+					"uint256",
+					"uint256",
+					"uint256",
+					"uint256",
+					"address[]",
+				],
+				[
+					2,
+					sellerWalletAddress,
+					"0x0000000000000000000000000000000000000000",
+					chainIdDst,
+					ethers.utils.parseEther("0.0001"),
+					ethers.utils.parseEther("0.0001"),
+					1,
+					5,
+					100,
+					deadline,
+					whiteList,
+				]
+			);
+
+			const gasFee = await lzEndpointMockDst.estimateFees(
+				chainIdSrc,
+				receiveFactoryContract.address,
+				encodedPayload,
+				false,
+				adapterParams
+			);
+			const transaction = await (
+				await receiveFactoryContract
+					.connect(sellerWallet)
+					.createDepositContractBySeller(
+						chainIdSrc,
+						sellerWalletAddress,
+						"0x0000000000000000000000000000000000000000",
+						chainIdDst,
+						ethers.utils.parseEther("0.0001"),
+						ethers.utils.parseEther("0.0001"),
+						1,
+						5,
+						100,
+						deadline,
+						whiteList,
+						adapterParams,
+						{ value: gasFee.nativeFee }
+					)
+			).wait();
+
+			const depositContractAddress =
+				await depositFactoryContract.deployedDepositContracts(
+					chainIdDst,
+					sellerWalletAddress
+				);
+
+			expect(depositContractAddress).not.to.be.equal(
+				"0x0000000000000000000000000000000000000000"
+			);
+			console.log("depositContractAddress", depositContractAddress);
+
+			const depositContract = await ethers.getContractAt(
+				"DepositContract",
+				depositContractAddress
+			);
+
+			expect(await depositContract.initialized()).to.be.equal(true);
+			expect(await depositContract.tokenAddress()).to.be.equal(
+				"0x0000000000000000000000000000000000000000"
+			);
+			expect(await depositContract.dstChainId()).to.be.equal(chainIdDst);
+			expect(await depositContract.mintPrice()).to.be.equal(
+				ethers.utils.parseEther("0.0001")
+			);
+			expect(await depositContract.whiteListMintPrice()).to.be.equal(
+				ethers.utils.parseEther("0.0001")
+			);
+			expect(await depositContract.minMintQuantity()).to.be.equal(1);
+			expect(await depositContract.maxMintQuantity()).to.be.equal(5);
+			expect(await depositContract.totalSupply()).to.be.equal(100);
+			expect(await depositContract.deadline()).to.be.equal(deadline);
+			expect(await depositContract.getTotalMintedToken()).to.be.equal(0);
+
+			await depositContract.connect(sellerWallet).changeStage(2);
+			expect(await depositContract.currentStage()).to.be.equal(2);
+			const depositItemData = {
+				mintPrice: ethers.utils.parseEther("0.0001"),
+				mintQuantity: 3,
+				sellerAddress: sellerWalletAddress,
+				dstChainId: chainIdDst,
+				isMintAvailable: true,
+				deadline: deadline,
+			};
+
+			await depositContract.connect(clientWallet).mint(depositItemData, {
+				value: ethers.utils.parseEther("0.0003"),
+			});
+
+			expect(await depositContract.getTotalMintedToken()).to.be.equal(3);
+
+			await receiveFactoryContract
+				.connect(validatorRoleAccount)
+				.mint(sellerWalletAddress, clientWalletAddress, 3, "0x");
+
+			const ERC1155 = await ethers.getContractFactory("ERC1155Contract");
+
+			const erc1155Contract = ERC1155.attach(
+				await receiveFactoryContract.getNftContractsOfAccount(
+					sellerWalletAddress
+				)
+			);
+
+			expect(await erc1155Contract.getNumberOfMintedTokens()).to.be.equal(
+				3
+			);
+		});
+	});
 });
