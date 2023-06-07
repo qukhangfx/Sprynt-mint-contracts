@@ -27,6 +27,10 @@ contract DepositContract {
 
     mapping(address => bool) public whiteList;
 
+    mapping(uint256 => address) public itemOwners;
+
+    mapping(address => bool) public canWithdraw;
+
     using SafeERC20 for IERC20;
 
     constructor() {}
@@ -101,36 +105,6 @@ contract DepositContract {
             require(msg.value >= value, "Insufficient native token balances");
         }
 
-        DepositFactoryContract depositFactoryContract = DepositFactoryContract(
-            _factoryContractAddress
-        );
-
-        uint256 platformFeeMintAmount = depositFactoryContract
-            .calcMintFeeAmount(value);
-        uint256 userProfit = value - platformFeeMintAmount;
-
-        if (tokenAddress == address(0)) {
-            Address.sendValue(
-                payable(depositFactoryContract.getAdminWallet()),
-                platformFeeMintAmount
-            );
-            Address.sendValue(
-                payable(depositItem.sellerAddress),
-                value - platformFeeMintAmount
-            );
-        } else {
-            IERC20(tokenAddress).safeTransferFrom(
-                tx.origin,
-                depositFactoryContract.getAdminWallet(),
-                platformFeeMintAmount
-            );
-            IERC20(tokenAddress).safeTransferFrom(
-                tx.origin,
-                depositItem.sellerAddress,
-                userProfit
-            );
-        }
-
         _mintedTokens += depositItem.mintQuantity;
     }
 
@@ -141,6 +115,31 @@ contract DepositContract {
             "No permission!"
         );
         _;
+    }
+
+    function setOwner(uint256 itemId, address owner) public onlyPermissioned {
+        itemOwners[itemId] = owner;
+    }
+
+    function withdrawDeposit(
+        DepositItem calldata depositItem,
+        uint256 itemId
+    ) public {
+        if (
+            block.timestamp > depositItem.deadline &&
+            itemOwners[itemId] == address(0)
+        ) {
+            uint256 value = depositItem.mintPrice * depositItem.mintQuantity;
+            if (tokenAddress == address(0)) {
+                Address.sendValue(payable(msg.sender), value);
+            } else {
+                IERC20(tokenAddress).safeTransferFrom(
+                    payable(address(this)),
+                    payable(msg.sender),
+                    value
+                );
+            }
+        }
     }
 
     function changeMintPrice(uint256 mintPrice_) public onlyPermissioned {
