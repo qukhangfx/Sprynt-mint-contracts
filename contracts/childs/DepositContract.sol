@@ -27,7 +27,7 @@ contract DepositContract {
 
     mapping(address => bool) public whiteList;
 
-    mapping(uint256 => address) public itemOwners;
+    mapping(address => bool) public isReceived;
 
     using SafeERC20 for IERC20;
 
@@ -103,6 +103,8 @@ contract DepositContract {
             require(msg.value >= value, "Insufficient native token balances");
         }
 
+        payable(address(this)).transfer(value);
+
         _mintedTokens += depositItem.mintQuantity;
     }
 
@@ -115,17 +117,14 @@ contract DepositContract {
         _;
     }
 
-    function setOwner(uint256 itemId, address owner) public onlyPermissioned {
-        itemOwners[itemId] = owner;
+    function setReceiveStatus(address owner) public onlyPermissioned {
+        isReceived[owner] = true;
     }
 
-    function withdrawDeposit(
-        DepositItem calldata depositItem,
-        uint256 itemId
-    ) public {
+    function withdrawDeposit(DepositItem calldata depositItem) public {
         if (
             block.timestamp > depositItem.deadline &&
-            itemOwners[itemId] == address(0)
+            isReceived[msg.sender] != true
         ) {
             uint256 value = depositItem.mintPrice * depositItem.mintQuantity;
             if (tokenAddress == address(0)) {
