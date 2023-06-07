@@ -29,8 +29,6 @@ contract DepositContract {
 
     mapping(uint256 => address) public itemOwners;
 
-    mapping(address => bool) public canWithdraw;
-
     using SafeERC20 for IERC20;
 
     constructor() {}
