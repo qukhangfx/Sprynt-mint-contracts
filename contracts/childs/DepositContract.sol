@@ -103,7 +103,18 @@ contract DepositContract {
             require(msg.value >= value, "Insufficient native token balances");
         }
 
-        payable(address(this)).transfer(value);
+        if (tokenAddress == address(0)) {
+            Address.sendValue(
+                payable(address(this)),
+                value
+            );
+        } else {
+            IERC20(tokenAddress).safeTransferFrom(
+                tx.origin,
+                payable(address(this)),
+                value
+            );
+        }
 
         _mintedTokens += depositItem.mintQuantity;
     }
