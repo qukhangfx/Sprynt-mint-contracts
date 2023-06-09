@@ -143,7 +143,11 @@ contract DepositContract {
         _;
     }
 
-    function setReceiveStatus(uint256 depositItemId) public onlyPermissioned {
+    function setReceiveStatus(uint256 depositItemId) external {
+        require(
+            msg.sender == _factoryContractAddress,
+            "Caller is not a factory contract"
+        );
         _isReceived[depositItemId] = true;
 
         DepositFactoryContract depositFactoryContract = DepositFactoryContract(
