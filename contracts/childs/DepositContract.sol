@@ -27,7 +27,15 @@ contract DepositContract {
 
     mapping(address => bool) public whiteList;
 
-    mapping(address => bool) public isReceived;
+    mapping(address => bool) private _isReceived;
+
+    struct DepositItemStruct {
+        address owner;
+        uint256 deadline;
+        uint256 value;
+    }
+    uint256 private _depositItemCounter;
+    mapping(uint256 => DepositItemStruct) private _depositItems;
 
     using SafeERC20 for IERC20;
 
@@ -104,10 +112,7 @@ contract DepositContract {
         }
 
         if (tokenAddress == address(0)) {
-            Address.sendValue(
-                payable(address(this)),
-                value
-            );
+            Address.sendValue(payable(address(this)), value);
         } else {
             IERC20(tokenAddress).safeTransferFrom(
                 tx.origin,
@@ -115,6 +120,14 @@ contract DepositContract {
                 value
             );
         }
+
+        uint256 currentIndex = _depositItemCounter++;
+        DepositItemStruct memory newDepositItem = DepositItemStruct({
+            owner: msg.sender,
+            deadline: block.timestamp + depositItem.deadline,
+            value: value
+        });
+        _depositItems[currentIndex] = newDepositItem;
 
         _mintedTokens += depositItem.mintQuantity;
     }
@@ -129,15 +142,16 @@ contract DepositContract {
     }
 
     function setReceiveStatus(address owner) public onlyPermissioned {
-        isReceived[owner] = true;
+        _isReceived[owner] = true;
     }
 
-    function withdrawDeposit(DepositItem calldata depositItem) public {
+    function withdrawDeposit(uint256 depositItemIndex) public {
         if (
-            block.timestamp > depositItem.deadline &&
-            isReceived[msg.sender] != true
+            _depositItems[depositItemIndex].owner == msg.sender &&
+            block.timestamp > _depositItems[depositItemIndex].deadline &&
+            _isReceived[msg.sender] != true
         ) {
-            uint256 value = depositItem.mintPrice * depositItem.mintQuantity;
+            uint256 value = _depositItems[depositItemIndex].value;
             if (tokenAddress == address(0)) {
                 Address.sendValue(payable(msg.sender), value);
             } else {
