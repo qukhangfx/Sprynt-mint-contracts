@@ -35,6 +35,7 @@ contract DepositContract {
         address owner;
         uint256 deadline;
         uint256 value;
+        uint256 amount;
     }
     uint256 private _depositItemCounter;
     mapping(uint256 => DepositItemStruct) private _depositItems;
@@ -127,11 +128,10 @@ contract DepositContract {
         DepositItemStruct memory newDepositItem = DepositItemStruct({
             owner: msg.sender,
             deadline: block.timestamp + depositDeadline,
-            value: value
+            value: value,
+            amount: depositItem.mintQuantity
         });
         _depositItems[currentIndex] = newDepositItem;
-
-        _mintedTokens += depositItem.mintQuantity;
     }
 
     modifier onlyPermissioned() {
@@ -179,6 +179,8 @@ contract DepositContract {
                 userProfit
             );
         }
+
+        _mintedTokens += _depositItems[depositItemId].amount;
     }
 
     function withdrawDeposit(uint256 depositItemIndex) public {

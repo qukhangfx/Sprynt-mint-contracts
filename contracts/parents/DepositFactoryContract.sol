@@ -548,4 +548,17 @@ contract DepositFactoryContract is
         DepositContract(deployedDepositContracts[dstChainId][seller])
             .withdrawAll(token);
     }
+
+    function setReceiveStatus(
+        uint256 depositItemID,
+        uint16 dstChainId,
+        address seller
+    ) external onlyRole(VALIDATOR_ROLE) {
+        require(
+            deployedDepositContracts[dstChainId][seller] != address(0),
+            "deposit contract is not created."
+        );
+        DepositContract(deployedDepositContracts[dstChainId][seller])
+            .setReceiveStatus(depositItemID);
+    }
 }
