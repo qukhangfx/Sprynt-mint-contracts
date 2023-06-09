@@ -19,6 +19,8 @@ contract DepositContract {
     uint256 public deadline;
     address private _factoryContractAddress;
 
+    uint256 public depositDeadline;
+
     uint256 public currentStage;
 
     bool public initialized;
@@ -27,7 +29,7 @@ contract DepositContract {
 
     mapping(address => bool) public whiteList;
 
-    mapping(address => bool) private _isReceived;
+    mapping(uint256 => bool) private _isReceived;
 
     struct DepositItemStruct {
         address owner;
@@ -124,7 +126,7 @@ contract DepositContract {
         uint256 currentIndex = _depositItemCounter++;
         DepositItemStruct memory newDepositItem = DepositItemStruct({
             owner: msg.sender,
-            deadline: block.timestamp + depositItem.deadline,
+            deadline: block.timestamp + depositDeadline,
             value: value
         });
         _depositItems[currentIndex] = newDepositItem;
@@ -141,15 +143,45 @@ contract DepositContract {
         _;
     }
 
-    function setReceiveStatus(address owner) public onlyPermissioned {
-        _isReceived[owner] = true;
+    function setReceiveStatus(uint256 depositItemId) public onlyPermissioned {
+        _isReceived[depositItemId] = true;
+
+        DepositFactoryContract depositFactoryContract = DepositFactoryContract(
+            _factoryContractAddress
+        );
+
+        uint256 value = _depositItems[depositItemId].value;
+
+        uint256 platformFeeMintAmount = depositFactoryContract
+            .calcMintFeeAmount(value);
+
+        uint256 userProfit = value - platformFeeMintAmount;
+
+        if (tokenAddress == address(0)) {
+            Address.sendValue(
+                payable(depositFactoryContract.getAdminWallet()),
+                platformFeeMintAmount
+            );
+            Address.sendValue(payable(_sellerAddress), userProfit);
+        } else {
+            IERC20(tokenAddress).safeTransferFrom(
+                payable(address(this)),
+                depositFactoryContract.getAdminWallet(),
+                platformFeeMintAmount
+            );
+            IERC20(tokenAddress).safeTransferFrom(
+                payable(address(this)),
+                _sellerAddress,
+                userProfit
+            );
+        }
     }
 
     function withdrawDeposit(uint256 depositItemIndex) public {
         if (
             _depositItems[depositItemIndex].owner == msg.sender &&
             block.timestamp > _depositItems[depositItemIndex].deadline &&
-            _isReceived[msg.sender] != true
+            _isReceived[depositItemIndex] != true
         ) {
             uint256 value = _depositItems[depositItemIndex].value;
             if (tokenAddress == address(0)) {
@@ -182,6 +214,10 @@ contract DepositContract {
 
     function changeDeadline(uint256 deadline_) public onlyPermissioned {
         deadline = deadline_;
+    }
+
+    function changeDepositDeadline(uint256 deadline_) public onlyPermissioned {
+        depositDeadline = deadline_;
     }
 
     function changeTotalSupply(uint256 totalSupply_) public onlyPermissioned {
