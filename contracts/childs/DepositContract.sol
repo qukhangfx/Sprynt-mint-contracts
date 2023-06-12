@@ -3,11 +3,15 @@ pragma solidity 0.8.17;
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+
 import "../library/Domain.sol";
 import {DepositItem} from "../library/Structs.sol";
 import {DepositFactoryContract} from "../parents/DepositFactoryContract.sol";
 
-contract DepositContract {
+import "hardhat/console.sol";
+
+contract DepositContract is ReentrancyGuard {
     address private _sellerAddress;
     address public tokenAddress;
     uint256 public dstChainId;
@@ -37,10 +41,13 @@ contract DepositContract {
         uint256 value;
         uint256 amount;
     }
-    uint256 private _depositItemCounter;
+    uint256 private _depositItemCounter = 0;
     mapping(uint256 => DepositItemStruct) private _depositItems;
 
     using SafeERC20 for IERC20;
+    using Address for address payable;
+
+    event Received(address sender, uint256 value);
 
     constructor() {}
 
@@ -76,6 +83,10 @@ contract DepositContract {
         }
 
         initialized = true;
+    }
+
+    receive() external payable {
+        emit Received(msg.sender, msg.value);
     }
 
     function mint(DepositItem calldata depositItem) public payable {
@@ -115,7 +126,7 @@ contract DepositContract {
         }
 
         if (tokenAddress == address(0)) {
-            Address.sendValue(payable(address(this)), value);
+            Address.sendValue(payable(address(this)), msg.value);
         } else {
             IERC20(tokenAddress).safeTransferFrom(
                 tx.origin,
@@ -124,7 +135,7 @@ contract DepositContract {
             );
         }
 
-        uint256 currentIndex = _depositItemCounter++;
+        uint256 currentIndex = ++_depositItemCounter;
         DepositItemStruct memory newDepositItem = DepositItemStruct({
             owner: msg.sender,
             deadline: block.timestamp + depositDeadline,
