@@ -411,13 +411,17 @@ describe("Test multichain minting engine", () => {
 				);
 			}
 			expect(await payContract.seller()).to.be.equal(sellerWalletAddress);
+			const vpID = ethers.utils.keccak256(
+				ethers.utils.toUtf8Bytes("test")
+			);
 
 			await expect(
 				payContract
 					.connect(clientWallet)
 					.pay(
 						testTokenContract.address,
-						ethers.utils.parseEther("0.0001")
+						ethers.utils.parseEther("0.0001"),
+						vpID
 					)
 			).to.be.revertedWith("ERC20: insufficient allowance");
 
@@ -427,6 +431,7 @@ describe("Test multichain minting engine", () => {
 					.pay(
 						"0x0000000000000000000000000000000000000000",
 						ethers.utils.parseEther("0.0001"),
+						vpID,
 						{
 							value: ethers.utils.parseEther("0.0001"),
 						}
@@ -445,8 +450,28 @@ describe("Test multichain minting engine", () => {
 			await expect(
 				payContract
 					.connect(clientWallet)
-					.pay(testTokenContract.address, 100_000)
+					.pay(testTokenContract.address, 100_000, vpID)
+			).to.be.revertedWith("vpID is already paid");
+
+			const newVPID = ethers.utils.keccak256(
+				ethers.utils.toUtf8Bytes("test2")
+			);
+			await expect(
+				payContract
+					.connect(clientWallet)
+					.pay(testTokenContract.address, 100_000, newVPID)
 			).to.be.fulfilled;
+
+			const eventFilter = payContract.filters.Pay(
+				testTokenContract.address,
+				clientWalletAddress,
+				newVPID
+			);
+
+			const event = await payContract.queryFilter(eventFilter);
+			expect(event.length).to.be.equal(1);
+			expect(event[0].args?.value).to.be.equal(100_000);
+			expect(event[0].args?.token).to.be.equal(testTokenContract.address);
 		});
 
 		it("check client create deposit contract", async () => {
