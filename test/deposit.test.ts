@@ -444,6 +444,7 @@ describe("Test multichain minting engine", () => {
           "uint256",
           "uint256",
           "uint256",
+          "uint256",
           "address[]",
         ],
         [
@@ -456,6 +457,7 @@ describe("Test multichain minting engine", () => {
           1,
           5,
           100,
+          deadline,
           deadline,
           whiteList,
         ]
@@ -481,6 +483,7 @@ describe("Test multichain minting engine", () => {
             1,
             5,
             100,
+            deadline,
             deadline,
             whiteList,
             adapterParams,

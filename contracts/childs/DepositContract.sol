@@ -61,6 +61,7 @@ contract DepositContract is ReentrancyGuard {
         uint256 maxMintQuantity_,
         uint256 totalSupply_,
         uint256 deadline_,
+        uint256 depositDeadline_,
         address factoryContractAddress,
         address[] memory whiteList_
     ) external {
@@ -75,6 +76,7 @@ contract DepositContract is ReentrancyGuard {
         maxMintQuantity = maxMintQuantity_;
         totalSupply = totalSupply_;
         deadline = deadline_;
+        depositDeadline = depositDeadline_;
         _factoryContractAddress = factoryContractAddress;
         if (whiteList_.length > 0) {
             for (uint256 i = 0; i < whiteList_.length; i++) {

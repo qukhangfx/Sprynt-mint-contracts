@@ -89,6 +89,7 @@ contract DepositFactoryContract is
         uint256 maxMintQuantity,
         uint256 totalSupply,
         uint256 deadline,
+        uint256 depositDeadline,
         address[] memory whiteList_
     ) public {
         if (deployedDepositContracts[dstChainId][sellerAddress] != address(0)) {
@@ -120,6 +121,10 @@ contract DepositFactoryContract is
             if (depositContract.deadline() != deadline) {
                 changeDeadline(depositContractAddress, deadline);
             }
+
+            if (depositContract.depositDeadline() != depositDeadline){
+                changeDepositDeadline(depositContractAddress, depositDeadline);
+            }
             if (whiteList_.length > 0) {
                 depositContract.addWhiteList(whiteList_);
             }
@@ -148,6 +153,7 @@ contract DepositFactoryContract is
                 maxMintQuantity,
                 totalSupply,
                 deadline,
+                depositDeadline,
                 address(this),
                 whiteList_
             );
@@ -223,6 +229,7 @@ contract DepositFactoryContract is
                 uint256 maxMintQuantity,
                 uint256 totalSupply,
                 uint256 deadline,
+                uint256 depositDeadline,
                 address[] memory whiteList_
             ) = abi.decode(
                     _payload,
@@ -231,6 +238,7 @@ contract DepositFactoryContract is
                         address,
                         address,
                         uint16,
+                        uint256,
                         uint256,
                         uint256,
                         uint256,
@@ -251,6 +259,7 @@ contract DepositFactoryContract is
                 maxMintQuantity,
                 totalSupply,
                 deadline,
+                depositDeadline,
                 whiteList_
             );
         }
@@ -429,6 +438,15 @@ contract DepositFactoryContract is
     ) public onlyPermissioned {
         DepositContract(payable(depositContractAddress)).changeDeadline(
             deadline
+        );
+    }
+
+    function changeDepositDeadline(
+        address depositContractAddress,
+        uint256 depositDeadline
+    ) public onlyPermissioned {
+        DepositContract(payable(depositContractAddress)).changeDepositDeadline(
+            depositDeadline
         );
     }
 
