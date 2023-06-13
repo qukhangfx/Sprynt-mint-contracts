@@ -3,11 +3,15 @@ pragma solidity 0.8.17;
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+
 import "../library/Domain.sol";
 import {DepositItem} from "../library/Structs.sol";
 import {DepositFactoryContract} from "../parents/DepositFactoryContract.sol";
 
-contract DepositContract {
+import "hardhat/console.sol";
+
+contract DepositContract is ReentrancyGuard {
     address private _sellerAddress;
     address public tokenAddress;
     uint256 public dstChainId;
@@ -19,6 +23,8 @@ contract DepositContract {
     uint256 public deadline;
     address private _factoryContractAddress;
 
+    uint256 public depositDeadline;
+
     uint256 public currentStage;
 
     bool public initialized;
@@ -27,7 +33,21 @@ contract DepositContract {
 
     mapping(address => bool) public whiteList;
 
+    mapping(uint256 => bool) private _isReceived;
+
+    struct DepositItemStruct {
+        address owner;
+        uint256 deadline;
+        uint256 value;
+        uint256 amount;
+    }
+    uint256 private _depositItemCounter = 0;
+    mapping(uint256 => DepositItemStruct) private _depositItems;
+
     using SafeERC20 for IERC20;
+    using Address for address payable;
+
+    event Received(address sender, uint256 value);
 
     constructor() {}
 
@@ -41,6 +61,7 @@ contract DepositContract {
         uint256 maxMintQuantity_,
         uint256 totalSupply_,
         uint256 deadline_,
+        uint256 depositDeadline_,
         address factoryContractAddress,
         address[] memory whiteList_
     ) external {
@@ -55,6 +76,7 @@ contract DepositContract {
         maxMintQuantity = maxMintQuantity_;
         totalSupply = totalSupply_;
         deadline = deadline_;
+        depositDeadline = depositDeadline_;
         _factoryContractAddress = factoryContractAddress;
         if (whiteList_.length > 0) {
             for (uint256 i = 0; i < whiteList_.length; i++) {
@@ -63,6 +85,10 @@ contract DepositContract {
         }
 
         initialized = true;
+    }
+
+    receive() external payable {
+        emit Received(msg.sender, msg.value);
     }
 
     function mint(DepositItem calldata depositItem) public payable {
@@ -101,37 +127,24 @@ contract DepositContract {
             require(msg.value >= value, "Insufficient native token balances");
         }
 
-        DepositFactoryContract depositFactoryContract = DepositFactoryContract(
-            _factoryContractAddress
-        );
-
-        uint256 platformFeeMintAmount = depositFactoryContract
-            .calcMintFeeAmount(value);
-        uint256 userProfit = value - platformFeeMintAmount;
-
         if (tokenAddress == address(0)) {
-            Address.sendValue(
-                payable(depositFactoryContract.getAdminWallet()),
-                platformFeeMintAmount
-            );
-            Address.sendValue(
-                payable(depositItem.sellerAddress),
-                value - platformFeeMintAmount
-            );
+            Address.sendValue(payable(address(this)), msg.value);
         } else {
             IERC20(tokenAddress).safeTransferFrom(
                 tx.origin,
-                depositFactoryContract.getAdminWallet(),
-                platformFeeMintAmount
-            );
-            IERC20(tokenAddress).safeTransferFrom(
-                tx.origin,
-                depositItem.sellerAddress,
-                userProfit
+                payable(address(this)),
+                value
             );
         }
 
-        _mintedTokens += depositItem.mintQuantity;
+        uint256 currentIndex = ++_depositItemCounter;
+        DepositItemStruct memory newDepositItem = DepositItemStruct({
+            owner: msg.sender,
+            deadline: block.timestamp + depositDeadline,
+            value: value,
+            amount: depositItem.mintQuantity
+        });
+        _depositItems[currentIndex] = newDepositItem;
     }
 
     modifier onlyPermissioned() {
@@ -141,6 +154,65 @@ contract DepositContract {
             "No permission!"
         );
         _;
+    }
+
+    function setReceiveStatus(uint256 depositItemId) external {
+        require(
+            msg.sender == _factoryContractAddress,
+            "Caller is not a factory contract"
+        );
+        _isReceived[depositItemId] = true;
+
+        DepositFactoryContract depositFactoryContract = DepositFactoryContract(
+            _factoryContractAddress
+        );
+
+        uint256 value = _depositItems[depositItemId].value;
+
+        uint256 platformFeeMintAmount = depositFactoryContract
+            .calcMintFeeAmount(value);
+
+        uint256 userProfit = value - platformFeeMintAmount;
+
+        if (tokenAddress == address(0)) {
+            Address.sendValue(
+                payable(depositFactoryContract.getAdminWallet()),
+                platformFeeMintAmount
+            );
+            Address.sendValue(payable(_sellerAddress), userProfit);
+        } else {
+            IERC20(tokenAddress).safeTransferFrom(
+                payable(address(this)),
+                depositFactoryContract.getAdminWallet(),
+                platformFeeMintAmount
+            );
+            IERC20(tokenAddress).safeTransferFrom(
+                payable(address(this)),
+                _sellerAddress,
+                userProfit
+            );
+        }
+
+        _mintedTokens += _depositItems[depositItemId].amount;
+    }
+
+    function withdrawDeposit(uint256 depositItemIndex) public {
+        if (
+            _depositItems[depositItemIndex].owner == msg.sender &&
+            block.timestamp > _depositItems[depositItemIndex].deadline &&
+            _isReceived[depositItemIndex] != true
+        ) {
+            uint256 value = _depositItems[depositItemIndex].value;
+            if (tokenAddress == address(0)) {
+                Address.sendValue(payable(msg.sender), value);
+            } else {
+                IERC20(tokenAddress).safeTransferFrom(
+                    payable(address(this)),
+                    payable(msg.sender),
+                    value
+                );
+            }
+        }
     }
 
     function changeMintPrice(uint256 mintPrice_) public onlyPermissioned {
@@ -161,6 +233,10 @@ contract DepositContract {
 
     function changeDeadline(uint256 deadline_) public onlyPermissioned {
         deadline = deadline_;
+    }
+
+    function changeDepositDeadline(uint256 deadline_) public onlyPermissioned {
+        depositDeadline = deadline_;
     }
 
     function changeTotalSupply(uint256 totalSupply_) public onlyPermissioned {

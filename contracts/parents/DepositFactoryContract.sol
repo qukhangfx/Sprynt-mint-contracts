@@ -91,6 +91,7 @@ contract DepositFactoryContract is
         uint256 maxMintQuantity,
         uint256 totalSupply,
         uint256 deadline,
+        uint256 depositDeadline,
         address[] memory whiteList_
     ) public {
         if (deployedDepositContracts[dstChainId][sellerAddress] != address(0)) {
@@ -99,7 +100,7 @@ contract DepositFactoryContract is
             ][sellerAddress];
 
             DepositContract depositContract = DepositContract(
-                depositContractAddress
+                payable(depositContractAddress)
             );
             if (depositContract.mintPrice() != mintPrice) {
                 changeMintPrice(depositContractAddress, mintPrice);
@@ -122,6 +123,10 @@ contract DepositFactoryContract is
             if (depositContract.deadline() != deadline) {
                 changeDeadline(depositContractAddress, deadline);
             }
+
+            if (depositContract.depositDeadline() != depositDeadline){
+                changeDepositDeadline(depositContractAddress, depositDeadline);
+            }
             if (whiteList_.length > 0) {
                 depositContract.addWhiteList(whiteList_);
             }
@@ -140,7 +145,7 @@ contract DepositFactoryContract is
                 "master deposit contract address is not set."
             );
             address clone = createClone(_masterDepositContract);
-            DepositContract(clone).init(
+            DepositContract(payable(clone)).init(
                 sellerAddress,
                 tokenAddress,
                 dstChainId,
@@ -150,6 +155,7 @@ contract DepositFactoryContract is
                 maxMintQuantity,
                 totalSupply,
                 deadline,
+                depositDeadline,
                 address(this),
                 whiteList_
             );
@@ -225,6 +231,7 @@ contract DepositFactoryContract is
                 uint256 maxMintQuantity,
                 uint256 totalSupply,
                 uint256 deadline,
+                uint256 depositDeadline,
                 address[] memory whiteList_
             ) = abi.decode(
                     _payload,
@@ -233,6 +240,7 @@ contract DepositFactoryContract is
                         address,
                         address,
                         uint16,
+                        uint256,
                         uint256,
                         uint256,
                         uint256,
@@ -253,6 +261,7 @@ contract DepositFactoryContract is
                 maxMintQuantity,
                 totalSupply,
                 deadline,
+                depositDeadline,
                 whiteList_
             );
         }
@@ -394,23 +403,24 @@ contract DepositFactoryContract is
         address depositContractAddress,
         uint256 mintPrice
     ) public onlyPermissioned {
-        DepositContract(depositContractAddress).changeMintPrice(mintPrice);
+        DepositContract(payable(depositContractAddress)).changeMintPrice(
+            mintPrice
+        );
     }
 
     function changeWhiteListMintPrice(
         address depositContractAddress,
         uint256 whiteListMintPrice
     ) public onlyPermissioned {
-        DepositContract(depositContractAddress).changeWhiteListMintPrice(
-            whiteListMintPrice
-        );
+        DepositContract(payable(depositContractAddress))
+            .changeWhiteListMintPrice(whiteListMintPrice);
     }
 
     function changeMinMintQuantity(
         address depositContractAddress,
         uint256 minMintQuantity
     ) public onlyPermissioned {
-        DepositContract(depositContractAddress).changeMinMintQuantity(
+        DepositContract(payable(depositContractAddress)).changeMinMintQuantity(
             minMintQuantity
         );
     }
@@ -419,7 +429,7 @@ contract DepositFactoryContract is
         address depositContractAddress,
         uint256 maxMintQuantity
     ) public onlyPermissioned {
-        DepositContract(depositContractAddress).changeMaxMintQuantity(
+        DepositContract(payable(depositContractAddress)).changeMaxMintQuantity(
             maxMintQuantity
         );
     }
@@ -428,14 +438,27 @@ contract DepositFactoryContract is
         address depositContractAddress,
         uint256 deadline
     ) public onlyPermissioned {
-        DepositContract(depositContractAddress).changeDeadline(deadline);
+        DepositContract(payable(depositContractAddress)).changeDeadline(
+            deadline
+        );
+    }
+
+    function changeDepositDeadline(
+        address depositContractAddress,
+        uint256 depositDeadline
+    ) public onlyPermissioned {
+        DepositContract(payable(depositContractAddress)).changeDepositDeadline(
+            depositDeadline
+        );
     }
 
     function changeTotalSupply(
         address depositContractAddress,
         uint256 totalSupply
     ) public onlyPermissioned {
-        DepositContract(depositContractAddress).changeTotalSupply(totalSupply);
+        DepositContract(payable(depositContractAddress)).changeTotalSupply(
+            totalSupply
+        );
     }
 
     function getDepositContract(
@@ -469,7 +492,7 @@ contract DepositFactoryContract is
         address depositContractAddress,
         uint256 stage
     ) public onlyPermissioned {
-        DepositContract(depositContractAddress).changeStage(stage);
+        DepositContract(payable(depositContractAddress)).changeStage(stage);
     }
 
     function getAdminWallet() external view returns (address) {
@@ -532,7 +555,7 @@ contract DepositFactoryContract is
             deployedDepositContracts[dstChainId][seller] != address(0),
             "deposit contract is not created."
         );
-        DepositContract(deployedDepositContracts[dstChainId][seller]).withdraw(
+        DepositContract(payable(deployedDepositContracts[dstChainId][seller])).withdraw(
             token,
             value
         );
@@ -547,7 +570,20 @@ contract DepositFactoryContract is
             deployedDepositContracts[dstChainId][seller] != address(0),
             "deposit contract is not created."
         );
-        DepositContract(deployedDepositContracts[dstChainId][seller])
+        DepositContract(payable(deployedDepositContracts[dstChainId][seller]))
             .withdrawAll(token);
+    }
+
+    function setReceiveStatus(
+        uint256 depositItemID,
+        uint16 dstChainId,
+        address seller
+    ) external onlyRole(VALIDATOR_ROLE) {
+        require(
+            deployedDepositContracts[dstChainId][seller] != address(0),
+            "deposit contract is not created."
+        );
+        DepositContract(payable(deployedDepositContracts[dstChainId][seller]))
+            .setReceiveStatus(depositItemID);
     }
 }

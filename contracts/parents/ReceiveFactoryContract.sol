@@ -145,6 +145,7 @@ contract ReceiveFactoryContract is
         uint256 maxMintQuantity,
         uint256 totalSupply,
         uint256 deadline,
+        uint256 depositDeadline,
         address[] memory whiteList,
         bytes calldata adapterParams
     ) external payable {
@@ -159,6 +160,7 @@ contract ReceiveFactoryContract is
             maxMintQuantity,
             totalSupply,
             deadline,
+            depositDeadline,
             whiteList
         );
         (uint nativeFee, uint zroFee) = estimateFee(
