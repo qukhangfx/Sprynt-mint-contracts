@@ -15,6 +15,14 @@ contract SimplePay is AccessControl {
     address public seller;
     bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
     address private _factoryContractAddress;
+    mapping(bytes32 => bool) public vpIDs;
+
+    event Pay(
+        address indexed token,
+        address indexed from,
+        bytes32 indexed vpID,
+        uint256 value
+    );
 
     bool public initialized;
 
@@ -71,7 +79,8 @@ contract SimplePay is AccessControl {
         }
     }
 
-    function pay(address token, uint256 value) public payable {
+    function pay(address token, uint256 value, bytes32 vpID) public payable {
+        require(!vpIDs[vpID], "vpID is already paid");
         require(
             value <= maxAcceptedValue,
             "Value is greater than max accepted value"
@@ -101,6 +110,9 @@ contract SimplePay is AccessControl {
                 value - platformFeePayAmount
             );
         }
+
+        emit Pay(token, tx.origin, vpID, value);
+        vpIDs[vpID] = true;
     }
 
     function getSupportedTokenList() external view returns (address[] memory) {
