@@ -42,7 +42,7 @@ contract DepositContract is ReentrancyGuard {
         uint256 amount;
     }
     uint256 private _depositItemCounter = 0;
-    mapping(uint256 => DepositItemStruct) private _depositItems;
+    mapping(uint256 => DepositItemStruct) public _depositItems;
 
     using SafeERC20 for IERC20;
     using Address for address payable;
