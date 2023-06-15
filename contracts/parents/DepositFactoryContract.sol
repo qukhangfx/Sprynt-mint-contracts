@@ -28,8 +28,8 @@ contract DepositFactoryContract is
     bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
     bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
 
-    uint96 public platformFeeMint = 250; // 2.5% platform fee
-    uint96 public platformFeePay = 250; // 2.5% platform fee
+    uint96 public platformFeeMint = 150; // 1.5% platform fee
+    uint96 public platformFeePay = 150; // 1.5% platform fee
     address public adminWallet;
     address private _masterDepositContract;
     address private _masterPayContract;
