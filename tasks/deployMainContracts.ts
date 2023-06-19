@@ -36,7 +36,6 @@ export const deployMainContractsByAdmin = async (taskArgs: any, hre: any) => {
       .connect(signer)
       .deploy(
         layerzeroConfig[networkName].lzEndpoint,
-        usdcAddresses[networkName],
         ownerAccount,
         adminWalletAccount,
         depositRoleAccount

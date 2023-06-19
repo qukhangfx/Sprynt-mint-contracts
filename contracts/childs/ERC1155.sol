@@ -5,16 +5,18 @@ import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard {
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard, Ownable {
     bytes32 public constant FACTORY_CONTRACT_ROLE =
         keccak256("FACTORY_CONTRACT_ROLE");
-
-    bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
     string private baseURI;
 
     uint256 private _mintedTokens;
 
     bool public initialized;
+
+    string public name = "Sprynt.io ERC1155 by Fuixlabs";
 
     constructor() ERC1155("") {}
 
@@ -24,8 +26,11 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard {
     ) external {
         require(!initialized, "Contract is already initialized");
         baseURI = tokenURI;
-        _grantRole(OWNER_ROLE, tx.origin);
         _grantRole(FACTORY_CONTRACT_ROLE, factoryContractAddress);
+        _setURI(tokenURI);
+
+        _transferOwnership(tx.origin);
+
         initialized = true;
     }
 
@@ -35,8 +40,9 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard {
         return super.supportsInterface(interfaceId);
     }
 
-    function setBaseURI(string calldata uri) external onlyRole(OWNER_ROLE) {
+    function setBaseURI(string calldata uri) external onlyOwner {
         baseURI = uri;
+        _setURI(uri);
     }
 
     function getBaseURI() external view returns (string memory) {
@@ -45,7 +51,7 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard {
 
     function setFactoryContractAddress(
         address factoryContractAddress
-    ) external onlyRole(OWNER_ROLE) {
+    ) external onlyOwner {
         require(
             factoryContractAddress != address(0),
             "contract address must not be zero address"
@@ -55,7 +61,7 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard {
 
     modifier onlyPermissioned() {
         require(
-            hasRole(OWNER_ROLE, msg.sender) ||
+            owner() == _msgSender() ||
                 hasRole(FACTORY_CONTRACT_ROLE, msg.sender),
             "Sender does not have the required role"
         );

@@ -1,12 +1,6 @@
 {
-  "polygonMumbai": {
-    "nftContract": "0x99623d0fAd05839D5F5b658c0d5B47f37f6C1022",
-    "factoryContract": "0x57CE59648642Bc97306B25ebd58E7717CDEc187D",
-    "tokenURI": "https://bafybeidyj2ases25wrcwyisxsbnfo6qe7oe4re5ql77uspoo6d33benknq.ipfs.nftstorage.link/"
-  },
-  "sepolia": {
-    "nftContract": "0x417b3F7d449bF7Dd159BFFfcf227D8AC221B386F",
-    "factoryContract": "0x235BaDa9d6F11A621cF21b50e19e0cDEDd7cDeD4",
-    "tokenURI": "https://bafybeidyj2ases25wrcwyisxsbnfo6qe7oe4re5ql77uspoo6d33benknq.ipfs.nftstorage.link/"
-  }
+  "sepolia": "0x42b384D0Da64922Af15fdC0EAc4fa19D568B3732",
+  "polygonMumbai": "0x2836d4fB9D89cC809644e919Ec5Cd7Db4C1D4c08",
+  "avalancheFujiTestnet": "0x1fb7DBc915a9cBEecE59F21eeff9d9CC6970c82a",
+  "ftmTestnet": "0xdDc6F9f753b903Ebb7CbCA4F9bdF9E216974b4A5"
 }

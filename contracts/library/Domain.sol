@@ -19,10 +19,10 @@ library Domain {
                     item.mintPrice,
                     item.mintQuantity,
                     item.sellerAddress,
-                    item.dstChainId,
-                    item.isMintAvailable,
-                    onchainNonce,
-                    item.deadline
+                    // item.dstChainId,
+                    // item.isMintAvailable,
+                    onchainNonce
+                    // item.deadline
                 )
             );
     }

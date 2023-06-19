@@ -1,0 +1,32 @@
+{
+  "DepositFactoryContract": {
+    "polygonMumbai": "0xb3c621673eB62dCCa194738b532379840B955dE2",
+    "sepolia": "0x4CfcC87e2824C1A27d84f0Fd964e9f7EfEfB0C7d",
+    "avalancheFujiTestnet": "0xd86486Ca5E813F4d3379C2132136C7F46D59975b",
+    "ftmTestnet": "0xC2e9B4bc43D8b47D98cAf088c613783AD5178683"
+  },
+  "ReceiveFactoryContract": {
+    "polygonMumbai": "0x732c7484cF3a5f132135666c03abf94635e85055",
+    "sepolia": "0xB2bA3c9bBbbA654c495DA375aA62001a352D6ef0",
+    "avalancheFujiTestnet": "0x0746aC1EeB6Ef46edf79DaC1c47C238C053150f7",
+    "ftmTestnet": "0x73b4F4dFdcE7092085b6589dC658652678B5e868"
+  },
+  "DepositContract": {
+    "polygonMumbai": "0x3abE88996A9Ba5827320b666E92ed1460C731B9b",
+    "sepolia": "0x12fCA5F68D86EAeAcc4C0Ca444E3bE0DAcCa3A3C",
+    "avalancheFujiTestnet": "0x550155E8962eb4AFa064E4c7fC8CA36b338b355c",
+    "ftmTestnet": "0xd86486Ca5E813F4d3379C2132136C7F46D59975b"
+  },
+  "SimplePayContract": {
+    "polygonMumbai": "0x7B3cd79FAaD6f99Ae76aBd7319266E41D1E5D961",
+    "sepolia": "0x0bB640a8C2593211832C802F271C42A715109ff4",
+    "avalancheFujiTestnet": "0xfdA65d5379704a79BB9e82F44Aa63b1D15436d95",
+    "ftmTestnet": "0x0746aC1EeB6Ef46edf79DaC1c47C238C053150f7"
+  },
+  "ERC1155Contract": {
+    "polygonMumbai": "0x7798FF61642aB5d8332F16C1f623F641Fd0373Bb",
+    "sepolia": "0x6744BCE8F8226F74B6B03D3A04753858a8B07253",
+    "avalancheFujiTestnet": "0x4Ea24DE95152fb82Dd878043f80015Eef7E016f8",
+    "ftmTestnet": "0x668B991872794f0D586690c17990a2A3A51D4892"
+  }
+}

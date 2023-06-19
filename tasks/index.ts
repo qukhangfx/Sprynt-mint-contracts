@@ -6,6 +6,9 @@ import { verifyChildContractsBySeller } from "./verifyChildContracts";
 import { setAllTrustRemotes } from "./setAllTrustRemotes";
 import { depositTokenByClient } from "./depositTokenTest";
 
+import { deployAndInitAllContractsBySeller } from "./deployAndInitAllContractsBySeller";
+import { mintDepositItemsBySeller } from "./mintDepositItemsBySeller";
+
 task(
   "deployMain",
   "deploy main factory contracts by admin",
@@ -50,3 +53,15 @@ task(
   .addParam("dchain", "deposit chain", "sepolia")
   .addParam("mchain", "mint chain", "polygonMumbai")
   .addParam("bnonce", "backend nonce value", "0");
+
+task(
+  "deploy",
+  "deploy all contracts by seller",
+  deployAndInitAllContractsBySeller
+);
+
+task(
+  "mint",
+  "mint deposit items by seller",
+  mintDepositItemsBySeller
+);

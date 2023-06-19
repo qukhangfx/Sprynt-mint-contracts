@@ -29,7 +29,6 @@ export const verifyMainContractsByAdmin = async (taskArgs: any, hre: any) => {
       address: contractAddress,
       constructorArguments: [
         layerzeroConfig[networkName].lzEndpoint,
-        usdcAddresses[networkName],
         ownerAccount,
         adminWalletAccount,
         depositRoleAccount,

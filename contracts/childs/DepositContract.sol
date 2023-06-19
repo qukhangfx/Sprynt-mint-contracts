@@ -49,6 +49,18 @@ contract DepositContract is ReentrancyGuard {
 
     event Received(address sender, uint256 value);
 
+    event WithdrawDeposit(address sender, uint256 depositItemId);
+
+    event Deposit(
+        uint256 depositItemId,
+        address owner,
+        uint256 amount,
+        uint256 value,
+        uint256 deadline
+    );
+
+    event SetReceiveStatus(address sender, uint256 depositItemId);
+
     constructor() {}
 
     function init(
@@ -92,6 +104,8 @@ contract DepositContract is ReentrancyGuard {
     }
 
     function mint(DepositItem calldata depositItem) public payable {
+        require(block.timestamp <= deadline, "The deadline has been exceeded!");
+
         require(currentStage != 0, "We have not ready yet!");
 
         require(depositItem.sellerAddress == _sellerAddress, "Invalid seller!");
@@ -107,9 +121,9 @@ contract DepositContract is ReentrancyGuard {
             "Exceed total supply!"
         );
 
-        require(depositItem.dstChainId == dstChainId, "Invalid dst chain id!");
+        // require(depositItem.dstChainId == dstChainId, "Invalid dst chain id!");
 
-        require(depositItem.deadline <= deadline, "Invalid deadline!");
+        // require(depositItem.deadline <= deadline, "Invalid deadline!");
 
         if (currentStage == 1) {
             require(whiteList[msg.sender], "You are not in white list!");
@@ -145,6 +159,14 @@ contract DepositContract is ReentrancyGuard {
             amount: depositItem.mintQuantity
         });
         _depositItems[currentIndex] = newDepositItem;
+
+        emit Deposit(
+            currentIndex,
+            msg.sender,
+            depositItem.mintQuantity,
+            value,
+            block.timestamp + depositDeadline
+        );
     }
 
     modifier onlyPermissioned() {
@@ -161,6 +183,17 @@ contract DepositContract is ReentrancyGuard {
             msg.sender == _factoryContractAddress,
             "Caller is not a factory contract"
         );
+
+        require(
+            _isReceived[depositItemId] == false,
+            "This deposit item is already received!"
+        );
+
+        require(
+            _depositItems[depositItemId].owner != address(0),
+            "This deposit item is not exist!"
+        );
+
         _isReceived[depositItemId] = true;
 
         DepositFactoryContract depositFactoryContract = DepositFactoryContract(
@@ -194,6 +227,8 @@ contract DepositContract is ReentrancyGuard {
         }
 
         _mintedTokens += _depositItems[depositItemId].amount;
+
+        emit SetReceiveStatus(msg.sender, depositItemId);
     }
 
     function withdrawDeposit(uint256 depositItemIndex) public {
@@ -212,6 +247,17 @@ contract DepositContract is ReentrancyGuard {
                     value
                 );
             }
+
+            emit WithdrawDeposit(msg.sender, depositItemIndex);
+
+            _depositItems[depositItemIndex] = DepositItemStruct({
+                owner: address(0),
+                deadline: _depositItems[depositItemIndex].deadline,
+                value: _depositItems[depositItemIndex].value,
+                amount: _depositItems[depositItemIndex].amount
+            });
+        } else {
+            revert("Invalid withdraw!");
         }
     }
 
@@ -276,6 +322,35 @@ contract DepositContract is ReentrancyGuard {
 
     function getFactoryContractAddress() public view returns (address) {
         return _factoryContractAddress;
+    }
+
+    function getNumberOfDepositItems() public view returns (uint256) {
+        return _depositItemCounter;
+    }
+
+    function getAllDepositItems()
+        public
+        view
+        returns (DepositItemStruct[] memory)
+    {
+        DepositItemStruct[] memory depositItems = new DepositItemStruct[](
+            _depositItemCounter
+        );
+        for (uint256 i = 0; i < _depositItemCounter; i++) {
+            depositItems[i] = _depositItems[i + 1];
+        }
+        return depositItems;
+    }
+
+    function getDepositItemById(
+        uint256 depositItemId
+    ) public view returns (DepositItemStruct memory) {
+        require(depositItemId > 0, "Invalid deposit item id!");
+        require(
+            depositItemId <= _depositItemCounter,
+            "Invalid deposit item id!"
+        );
+        return _depositItems[depositItemId];
     }
 
     function withdraw(address token, uint256 value) external {
