@@ -16,8 +16,6 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard, Ownable {
 
     bool public initialized;
 
-    string public name = "Sprynt.io ERC1155 by Fuixlabs";
-
     constructor() ERC1155("") {}
 
     function init(
