@@ -4,8 +4,11 @@ import {DepositItem} from "./Structs.sol";
 
 library Domain {
     bytes32 public constant DEPOSIT_ITEM_TYPEHASH =
+        // keccak256(
+        //     "DepositItem(uint256 mintPrice,uint256 mintQuantity,address sellerAddress,uint16 dstChainId,bool isMintAvailable,uint256 nonce,uint256 deadline)"
+        // );
         keccak256(
-            "DepositItem(uint256 mintPrice,uint256 mintQuantity,address sellerAddress,uint16 dstChainId,bool isMintAvailable,uint256 nonce,uint256 deadline)"
+            "DepositItem(uint256 mintPrice,uint256 mintQuantity,address sellerAddress,uint256 nonce)"
         );
 
     function _hashDepositItem(
