@@ -460,6 +460,21 @@ contract DepositFactoryContract is
         );
     }
 
+    function addWhiteList(
+        address depositContractAddress,
+        address[] memory buyers
+    ) public onlyPermissioned {
+        DepositContract(payable(depositContractAddress)).addWhiteList(buyers);
+    }
+
+    function removeWhiteList(
+        address depositContractAddress,
+        address[] memory buyers
+    ) public onlyPermissioned {
+        DepositContract(payable(depositContractAddress))
+            .removeWhiteList(buyers);
+    }
+
     function getDepositContract(
         uint16 dstChainId,
         address seller

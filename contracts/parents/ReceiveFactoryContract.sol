@@ -209,4 +209,25 @@ contract ReceiveFactoryContract is
         uint64 _nonce,
         bytes memory _payload
     ) internal virtual override {}
+
+    function setName(address _nftContractAddress, string memory _name)
+        external
+        onlyOwner
+    {
+        ERC1155Contract(_nftContractAddress).setName(_name);
+    }
+
+    function setSymbol(address _nftContractAddress, string memory _symbol)
+        external
+        onlyOwner
+    {
+        ERC1155Contract(_nftContractAddress).setSymbol(_symbol);
+    }
+
+    function setBaseURI(address _nftContractAddress, string memory _baseURI)
+        external
+        onlyOwner
+    {
+        ERC1155Contract(_nftContractAddress).setBaseURI(_baseURI);
+    }
 }

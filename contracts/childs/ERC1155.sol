@@ -11,6 +11,8 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard, Ownable {
     bytes32 public constant FACTORY_CONTRACT_ROLE =
         keccak256("FACTORY_CONTRACT_ROLE");
     string private baseURI;
+    string public name;
+    string public symbol;
 
     uint256 private _mintedTokens;
 
@@ -27,6 +29,9 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard, Ownable {
         _grantRole(FACTORY_CONTRACT_ROLE, factoryContractAddress);
         _setURI(tokenURI);
 
+        name = "";
+        symbol = "";
+
         _transferOwnership(tx.origin);
 
         initialized = true;
@@ -38,9 +43,17 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard, Ownable {
         return super.supportsInterface(interfaceId);
     }
 
-    function setBaseURI(string calldata uri) external onlyOwner {
-        baseURI = uri;
-        _setURI(uri);
+    function setBaseURI(string calldata _uri) external onlyPermissioned {
+        baseURI = _uri;
+        _setURI(_uri);
+    }
+
+    function setName(string calldata _name) external onlyPermissioned {
+        name = _name;
+    }
+
+    function setSymbol(string calldata _symbol) external onlyPermissioned {
+        symbol = _symbol;
     }
 
     function getBaseURI() external view returns (string memory) {
@@ -91,5 +104,12 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard, Ownable {
 
     function getNumberOfMintedTokens() external view returns (uint256) {
         return _mintedTokens;
+    }
+
+    function uri(uint256 tokenId) public view override returns (string memory) {
+        return
+            string(
+                abi.encodePacked(this.getBaseURI(), Strings.toString(tokenId))
+            );
     }
 }

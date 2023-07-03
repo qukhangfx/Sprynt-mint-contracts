@@ -228,6 +228,11 @@ contract DepositContract is ReentrancyGuard {
 
         _mintedTokens += _depositItems[depositItemId].amount;
 
+        require(
+            _mintedTokens <= totalSupply,
+            "Exceed total supply!"
+        );
+
         emit SetReceiveStatus(msg.sender, depositItemId);
     }
 
@@ -395,5 +400,22 @@ contract DepositContract is ReentrancyGuard {
                 IERC20(token).balanceOf(address(this))
             );
         }
+    }
+
+    function getAllInfo()
+        public
+        view
+        returns (uint256, uint256, uint256, uint256, uint256, uint256 , uint256 , uint256)
+    {
+        return (
+            maxMintQuantity,
+            depositDeadline,
+            totalSupply,
+            mintPrice,
+            whiteListMintPrice,
+            deadline,
+            _mintedTokens,
+            currentStage
+        );
     }
 }
