@@ -42,7 +42,7 @@ contract DepositContract is ReentrancyGuard {
         uint256 amount;
     }
     uint256 private _depositItemCounter = 0;
-    mapping(uint256 => DepositItemStruct) private _depositItems;
+    mapping(uint256 => DepositItemStruct) public _depositItems;
 
     using SafeERC20 for IERC20;
     using Address for address payable;
@@ -121,10 +121,6 @@ contract DepositContract is ReentrancyGuard {
             "Exceed total supply!"
         );
 
-        // require(depositItem.dstChainId == dstChainId, "Invalid dst chain id!");
-
-        // require(depositItem.deadline <= deadline, "Invalid deadline!");
-
         if (currentStage == 1) {
             require(whiteList[msg.sender], "You are not in white list!");
             require(
@@ -139,6 +135,9 @@ contract DepositContract is ReentrancyGuard {
 
         if (tokenAddress == address(0)) {
             require(msg.value >= value, "Insufficient native token balances");
+
+            // Ensure the contract has received the correct amount of native tokens
+            require(msg.value == value, "Value not equal!");
         }
 
         if (tokenAddress == address(0)) {
@@ -228,15 +227,16 @@ contract DepositContract is ReentrancyGuard {
 
         _mintedTokens += _depositItems[depositItemId].amount;
 
-        require(
-            _mintedTokens <= totalSupply,
-            "Exceed total supply!"
-        );
+        require(_mintedTokens <= totalSupply, "Exceed total supply!");
 
         emit SetReceiveStatus(msg.sender, depositItemId);
     }
 
     function withdrawDeposit(uint256 depositItemIndex) public {
+        require(_depositItems[depositItemIndex].owner == msg.sender, "No permission!");
+        require(_depositItems[depositItemIndex].deadline < block.timestamp, "The deadline has not been exceeded!");
+        require(_isReceived[depositItemIndex] != true, "This deposit item is already received!");
+
         if (
             _depositItems[depositItemIndex].owner == msg.sender &&
             block.timestamp > _depositItems[depositItemIndex].deadline &&
@@ -358,54 +358,19 @@ contract DepositContract is ReentrancyGuard {
         return _depositItems[depositItemId];
     }
 
-    function withdraw(address token, uint256 value) external {
-        require(
-            msg.sender == _factoryContractAddress,
-            "Caller is not a factory contract"
-        );
-        DepositFactoryContract depositFactoryContract = DepositFactoryContract(
-            _factoryContractAddress
-        );
-        if (token == address(0)) {
-            Address.sendValue(
-                payable(depositFactoryContract.getAdminWallet()),
-                value
-            );
-        } else {
-            IERC20(token).safeTransferFrom(
-                address(this),
-                depositFactoryContract.getAdminWallet(),
-                value
-            );
-        }
-    }
-
-    function withdrawAll(address token) external {
-        require(
-            msg.sender == _factoryContractAddress,
-            "Caller is not a factory contract"
-        );
-        DepositFactoryContract depositFactoryContract = DepositFactoryContract(
-            _factoryContractAddress
-        );
-        if (token == address(0)) {
-            Address.sendValue(
-                payable(depositFactoryContract.getAdminWallet()),
-                address(this).balance
-            );
-        } else {
-            IERC20(token).safeTransferFrom(
-                address(this),
-                payable(depositFactoryContract.getAdminWallet()),
-                IERC20(token).balanceOf(address(this))
-            );
-        }
-    }
-
     function getAllInfo()
         public
         view
-        returns (uint256, uint256, uint256, uint256, uint256, uint256 , uint256 , uint256)
+        returns (
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            uint256
+        )
     {
         return (
             maxMintQuantity,

@@ -27,8 +27,8 @@ contract DepositFactoryContract is
     bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
     bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
 
-    uint96 public platformFeeMint = 250; // 2.5% platform fee
-    uint96 public platformFeePay = 250; // 2.5% platform fee
+    uint96 public platformFeeMint = 0; // 1.5% platform fee
+    uint96 public platformFeePay = 0; // 1.5% platform fee
     address public adminWallet;
     address private _masterDepositContract;
     address private _masterPayContract;
@@ -123,7 +123,7 @@ contract DepositFactoryContract is
                 changeDeadline(depositContractAddress, deadline);
             }
 
-            if (depositContract.depositDeadline() != depositDeadline){
+            if (depositContract.depositDeadline() != depositDeadline) {
                 changeDepositDeadline(depositContractAddress, depositDeadline);
             }
             if (whiteList_.length > 0) {
@@ -166,9 +166,9 @@ contract DepositFactoryContract is
 
     function createPayContractBySeller(
         uint256 maxAcceptedValue,
-        bool forwarded,
         address[] memory tokenAddresses,
-        address sellerAddress
+        address sellerAddress,
+        uint256 deadline
     ) public {
         require(
             payContracts[sellerAddress] == address(0),
@@ -179,11 +179,11 @@ contract DepositFactoryContract is
             "master pay contract address is not set."
         );
         address clone = createClone(_masterPayContract);
-        SimplePay(clone).init(
+        SimplePay(payable(clone)).init(
             maxAcceptedValue,
-            forwarded,
             tokenAddresses,
-            sellerAddress
+            sellerAddress,
+            deadline
         );
         payContracts[sellerAddress] = address(clone);
         _payContracts[clone] = true;
@@ -205,18 +205,18 @@ contract DepositFactoryContract is
             (
                 uint256 task,
                 uint256 maxAcceptedValue,
-                bool forwarded,
                 address[] memory tokenAddresses_,
-                address sellerAddress
+                address sellerAddress,
+                uint256 deadline
             ) = abi.decode(
                     _payload,
-                    (uint256, uint256, bool, address[], address)
+                    (uint256, uint256, address[], address, uint256)
                 );
             createPayContractBySeller(
                 maxAcceptedValue,
-                forwarded,
                 tokenAddresses_,
-                sellerAddress
+                sellerAddress,
+                deadline
             );
         } else if (taskType == 2) {
             (
@@ -398,6 +398,24 @@ contract DepositFactoryContract is
         _;
     }
 
+    function addWhiteList(
+        address depositContractAddress,
+        address[] memory whiteList
+    ) public onlyPermissioned {
+        DepositContract(payable(depositContractAddress)).addWhiteList(
+            whiteList
+        );
+    }
+
+    function removeWhiteList(
+        address depositContractAddress,
+        address[] memory whiteList
+    ) public onlyPermissioned {
+        DepositContract(payable(depositContractAddress)).removeWhiteList(
+            whiteList
+        );
+    }
+
     function changeMintPrice(
         address depositContractAddress,
         uint256 mintPrice
@@ -460,21 +478,6 @@ contract DepositFactoryContract is
         );
     }
 
-    function addWhiteList(
-        address depositContractAddress,
-        address[] memory buyers
-    ) public onlyPermissioned {
-        DepositContract(payable(depositContractAddress)).addWhiteList(buyers);
-    }
-
-    function removeWhiteList(
-        address depositContractAddress,
-        address[] memory buyers
-    ) public onlyPermissioned {
-        DepositContract(payable(depositContractAddress))
-            .removeWhiteList(buyers);
-    }
-
     function getDepositContract(
         uint16 dstChainId,
         address seller
@@ -496,7 +499,7 @@ contract DepositFactoryContract is
             "pay contract is not created."
         );
 
-        SimplePay(payContracts[seller]).updateSupportToken(
+        SimplePay(payable(payContracts[seller])).updateSupportToken(
             supportedTokenAddress_,
             isSupported
         );
@@ -536,58 +539,6 @@ contract DepositFactoryContract is
         }
     }
 
-    function withdrawPayContract(
-        address token,
-        uint256 value,
-        address seller
-    ) external onlyRole(OWNER_ROLE) {
-        require(
-            payContracts[seller] != address(0),
-            "pay contract is not created."
-        );
-        SimplePay(payContracts[seller]).withdraw(token, value);
-    }
-
-    function withdrawAllPayContract(
-        address token,
-        address seller
-    ) external onlyRole(OWNER_ROLE) {
-        require(
-            payContracts[seller] != address(0),
-            "pay contract is not created."
-        );
-        SimplePay(payContracts[seller]).withdrawAll(token);
-    }
-
-    function withdrawDepositContract(
-        address token,
-        uint256 value,
-        uint16 dstChainId,
-        address seller
-    ) external onlyRole(OWNER_ROLE) {
-        require(
-            deployedDepositContracts[dstChainId][seller] != address(0),
-            "deposit contract is not created."
-        );
-        DepositContract(payable(deployedDepositContracts[dstChainId][seller])).withdraw(
-            token,
-            value
-        );
-    }
-
-    function withdrawAllDepositContract(
-        address token,
-        uint16 dstChainId,
-        address seller
-    ) external onlyRole(OWNER_ROLE) {
-        require(
-            deployedDepositContracts[dstChainId][seller] != address(0),
-            "deposit contract is not created."
-        );
-        DepositContract(payable(deployedDepositContracts[dstChainId][seller]))
-            .withdrawAll(token);
-    }
-
     function setReceiveStatus(
         uint256 depositItemID,
         uint16 dstChainId,
@@ -599,5 +550,16 @@ contract DepositFactoryContract is
         );
         DepositContract(payable(deployedDepositContracts[dstChainId][seller]))
             .setReceiveStatus(depositItemID);
+    }
+
+    function setPayReceiveStatus(
+        bytes32 vpID,
+        address seller
+    ) external onlyRole(VALIDATOR_ROLE) {
+        require(
+            payContracts[seller] != address(0),
+            "deposit contract is not created."
+        );
+        SimplePay(payable(payContracts[seller])).setReceiveStatus(vpID);
     }
 }

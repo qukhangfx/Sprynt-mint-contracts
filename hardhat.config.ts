@@ -37,7 +37,7 @@ const chainIds = {
 };
 
 const PRIVATE_KEY = process.env.PK || "";
-const DEPOSIT_PRIVATE_KEY = process.env.DEPOSIT_ROLE_PK || "";
+// const DEPOSIT_PRIVATE_KEY = process.env.DEPOSIT_ROLE_PK || "";
 
 const ETHERSCAN_KEY = process.env.ETHERSCAN_KEY || "";
 const POLYGONSCAN_KEY = process.env.POLYGONSCAN_KEY || "";
@@ -77,7 +77,7 @@ const config = {
     sepolia: {
       url: TEST_ETH_RPC_URL,
       chainId: chainIds.sepolia,
-      accounts: [PRIVATE_KEY, DEPOSIT_PRIVATE_KEY],
+      accounts: [PRIVATE_KEY],
       gasMultiplier: 1.25,
       allowUnlimitedContractSize: true,
     },
@@ -90,7 +90,7 @@ const config = {
     polygonMumbai: {
       url: TEST_POLYGON_RPC_URL,
       chainId: chainIds.mumbai,
-      accounts: [PRIVATE_KEY, DEPOSIT_PRIVATE_KEY],
+      accounts: [PRIVATE_KEY],
       gasMultiplier: 1.25,
       allowUnlimitedContractSize: true,
     },

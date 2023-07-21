@@ -1,32 +1,44 @@
 {
   "DepositFactoryContract": {
-    "polygonMumbai": "0xb3c621673eB62dCCa194738b532379840B955dE2",
-    "sepolia": "0x4CfcC87e2824C1A27d84f0Fd964e9f7EfEfB0C7d",
-    "avalancheFujiTestnet": "0xd86486Ca5E813F4d3379C2132136C7F46D59975b",
-    "ftmTestnet": "0xC2e9B4bc43D8b47D98cAf088c613783AD5178683"
+    "sepolia": "0x3101dA1746a5Fc0899BdAb034D94562DD871b7b3",
+    "avalancheFujiTestnet": "0x3101dA1746a5Fc0899BdAb034D94562DD871b7b3",
+    "ftmTestnet": "0x3101dA1746a5Fc0899BdAb034D94562DD871b7b3",
+    "bscTestnet": "0x3101dA1746a5Fc0899BdAb034D94562DD871b7b3",
+    "polygonMumbai": "0x3101dA1746a5Fc0899BdAb034D94562DD871b7b3"
   },
   "ReceiveFactoryContract": {
-    "polygonMumbai": "0x732c7484cF3a5f132135666c03abf94635e85055",
-    "sepolia": "0xB2bA3c9bBbbA654c495DA375aA62001a352D6ef0",
-    "avalancheFujiTestnet": "0x0746aC1EeB6Ef46edf79DaC1c47C238C053150f7",
-    "ftmTestnet": "0x73b4F4dFdcE7092085b6589dC658652678B5e868"
-  },
-  "DepositContract": {
-    "polygonMumbai": "0x3abE88996A9Ba5827320b666E92ed1460C731B9b",
-    "sepolia": "0x12fCA5F68D86EAeAcc4C0Ca444E3bE0DAcCa3A3C",
-    "avalancheFujiTestnet": "0x550155E8962eb4AFa064E4c7fC8CA36b338b355c",
-    "ftmTestnet": "0xd86486Ca5E813F4d3379C2132136C7F46D59975b"
+    "sepolia": "0x970be78D3Ba1beb8BFeeBC2d6eb79f9af8171462",
+    "avalancheFujiTestnet": "0x970be78D3Ba1beb8BFeeBC2d6eb79f9af8171462",
+    "ftmTestnet": "0x970be78D3Ba1beb8BFeeBC2d6eb79f9af8171462",
+    "bscTestnet": "0x970be78D3Ba1beb8BFeeBC2d6eb79f9af8171462",
+    "polygonMumbai": "0x970be78D3Ba1beb8BFeeBC2d6eb79f9af8171462"
   },
   "SimplePayContract": {
-    "polygonMumbai": "0x7B3cd79FAaD6f99Ae76aBd7319266E41D1E5D961",
-    "sepolia": "0x0bB640a8C2593211832C802F271C42A715109ff4",
-    "avalancheFujiTestnet": "0xfdA65d5379704a79BB9e82F44Aa63b1D15436d95",
-    "ftmTestnet": "0x0746aC1EeB6Ef46edf79DaC1c47C238C053150f7"
+    "sepolia": "0x5746F3D0205b1d25d64B682C2078E4F5616DF4D8",
+    "avalancheFujiTestnet": "0x5746F3D0205b1d25d64B682C2078E4F5616DF4D8",
+    "ftmTestnet": "0x5746F3D0205b1d25d64B682C2078E4F5616DF4D8",
+    "bscTestnet": "0x75b30bfE1cCBAeA62b6Dcff76182f3a4B15da0a0",
+    "polygonMumbai": "0x2F93DC26245e2CCc8cEAF2F2c75D7bd6aE9b525f"
+  },
+  "RPaymentContract": {
+    "sepolia": "0x894F3d825eBC512fE940D16A162ef77697E471bC",
+    "avalancheFujiTestnet": "0x1D87c99035b61E88b11DFa4357efC5A81eF1FB5c",
+    "ftmTestnet": "0x124756D7b790979a23AB0998F7B697C601a5874f",
+    "bscTestnet": "0x2753DeA5581475e02671F6053faA1cfB915a55f8",
+    "polygonMumbai": "0xaa192E5Fe15DE6F8c5f837E46E7799330027A579"
+  },
+  "DepositContract": {
+    "sepolia": "0x5a97A75EE7521f23FE6fDB10db8922B41Ab24d04",
+    "avalancheFujiTestnet": "0x5a97A75EE7521f23FE6fDB10db8922B41Ab24d04",
+    "ftmTestnet": "0x5a97A75EE7521f23FE6fDB10db8922B41Ab24d04",
+    "bscTestnet": "0x5a97A75EE7521f23FE6fDB10db8922B41Ab24d04",
+    "polygonMumbai": "0x5a97A75EE7521f23FE6fDB10db8922B41Ab24d04"
   },
   "ERC1155Contract": {
-    "polygonMumbai": "0x7798FF61642aB5d8332F16C1f623F641Fd0373Bb",
-    "sepolia": "0x6744BCE8F8226F74B6B03D3A04753858a8B07253",
-    "avalancheFujiTestnet": "0x4Ea24DE95152fb82Dd878043f80015Eef7E016f8",
-    "ftmTestnet": "0x668B991872794f0D586690c17990a2A3A51D4892"
+    "sepolia": "0x6Aa3Eb23521E21D14ab3AbBe9FE8A7587d777a02",
+    "avalancheFujiTestnet": "0xDB50cA1289978680E21fdB24E4046B81bf73a15e",
+    "ftmTestnet": "0xb4227a973cECF7341f70072fd2bd64d7a9CF66A0",
+    "bscTestnet": "0x436A14298AA929000D1eA1a78f932A0aF0Cf74F2",
+    "polygonMumbai": "0x6b87A5a6355EDc17Ae6d91E6455f3Bc9D68c5065"
   }
 }

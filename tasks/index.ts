@@ -8,6 +8,7 @@ import { depositTokenByClient } from "./depositTokenTest";
 
 import { deployAndInitAllContractsBySeller } from "./deployAndInitAllContractsBySeller";
 import { mintDepositItemsBySeller } from "./mintDepositItemsBySeller";
+import { deployRPaymentContract } from "./deployRPaymentContract";
 
 task(
   "deployMain",
@@ -64,4 +65,10 @@ task(
   "mint",
   "mint deposit items by seller",
   mintDepositItemsBySeller
+);
+
+task(
+  "deployRP",
+  "xxx",
+  deployRPaymentContract
 );

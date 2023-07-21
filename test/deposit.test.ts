@@ -324,8 +324,9 @@ describe("Test multichain minting engine", () => {
 
     it("check client create pay contract", async () => {
       const currentTimestamp = await helpers.time.latest();
-      const deadline = currentTimestamp + 10 * 60;
-      const supportedTokens = [testTokenContract.address];
+      // const deadline = currentTimestamp + 10 * 60;
+      const deadline = 0;
+      const supportedTokens = [testTokenContract.address, "0x0000000000000000000000000000000000000000"];
       let adapterParams = ethers.utils.solidityPack(
         ["uint16", "uint256"],
         [1, 320_000 + 25_000 * supportedTokens.length]
@@ -333,8 +334,14 @@ describe("Test multichain minting engine", () => {
 
       const maxAcceptValue = ethers.utils.parseEther("3");
       const encodedPayload = ethers.utils.defaultAbiCoder.encode(
-        ["uint256", "uint256", "bool", "address[]", "address"],
-        [1, maxAcceptValue, true, supportedTokens, sellerWalletAddress]
+        ["uint256", "uint256", "address[]", "address", "uint256"],
+        [
+          1,
+          maxAcceptValue,
+          supportedTokens,
+          sellerWalletAddress,
+          deadline,
+        ]
       );
 
       const gasFee = await lzEndpointMockDst.estimateFees(
@@ -350,8 +357,8 @@ describe("Test multichain minting engine", () => {
           .connect(sellerWallet)
           .createPayContractBySeller(
             maxAcceptValue,
-            true,
             supportedTokens,
+            deadline,
             chainIdSrc,
             adapterParams,
             { value: gasFee.nativeFee }
@@ -373,7 +380,6 @@ describe("Test multichain minting engine", () => {
       );
       expect(await payContract.initialized()).to.be.equal(true);
       expect(await payContract.maxAcceptedValue()).to.be.equal(maxAcceptValue);
-      expect(await payContract.forwarded()).to.be.equal(true);
       const supportedTokensFromContract =
         await payContract.getSupportedTokenList();
       expect(supportedTokensFromContract.length).to.be.equal(
@@ -383,89 +389,113 @@ describe("Test multichain minting engine", () => {
         expect(supportedTokensFromContract[i]).to.be.equal(supportedTokens[i]);
       }
       expect(await payContract.seller()).to.be.equal(sellerWalletAddress);
-			console.log("payContractAddress", payContractAddress);
-			const payContract = await ethers.getContractAt(
-				"SimplePay",
-				payContractAddress
-			);
-			expect(await payContract.initialized()).to.be.equal(true);
-			expect(await payContract.maxAcceptedValue()).to.be.equal(
-				maxAcceptValue
-			);
-			expect(await payContract.forwarded()).to.be.equal(true);
-			const supportedTokensFromContract =
-				await payContract.getSupportedTokenList();
-			expect(supportedTokensFromContract.length).to.be.equal(
-				supportedTokens.length
-			);
-			for (let i = 0; i < supportedTokens.length; i++) {
-				expect(supportedTokensFromContract[i]).to.be.equal(
-					supportedTokens[i]
-				);
-			}
-			expect(await payContract.seller()).to.be.equal(sellerWalletAddress);
-			const vpID = ethers.utils.keccak256(
-				ethers.utils.toUtf8Bytes("test")
-			);
+      const vpID = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("test"));
+      const vpID2 = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("test2"));
+      const vpID3 = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("test3"));
 
-			await expect(
-				payContract
-					.connect(clientWallet)
-					.pay(
-						testTokenContract.address,
-						ethers.utils.parseEther("0.0001"),
-						vpID
-					)
-			).to.be.revertedWith("ERC20: insufficient allowance");
-
-			await expect(
-				payContract
-					.connect(clientWallet)
-					.pay(
-						"0x0000000000000000000000000000000000000000",
-						ethers.utils.parseEther("0.0001"),
-						vpID,
-						{
-							value: ethers.utils.parseEther("0.0001"),
-						}
-					)
-			).to.be.fulfilled;
+      await expect(
+        payContract
+          .connect(clientWallet)
+          .deposit(
+            testTokenContract.address,
+            ethers.utils.parseEther("0.0001"),
+            vpID
+          )
+      ).to.be.revertedWith("ERC20: insufficient allowance");
 
       await testTokenContract
-        .connect(clientWallet)
-        .approve(payContract.address, 100_000);
+      .connect(clientWallet)
+      .approve(payContract.address, 10000000000000);
 
       const balanceOfClientWallet = await testTokenContract.balanceOf(
         clientWalletAddress
       );
       console.log("balanceOfClientWallet", balanceOfClientWallet);
 
-			await expect(
-				payContract
-					.connect(clientWallet)
-					.pay(testTokenContract.address, 100_000, vpID)
-			).to.be.revertedWith("vpID is already paid");
+      await expect(
+        payContract
+          .connect(clientWallet)
+          .deposit(
+            testTokenContract.address,
+            ethers.utils.parseEther("0.00001"),
+            vpID
+          )
+      ).to.be.fulfilled;
 
-			const newVPID = ethers.utils.keccak256(
-				ethers.utils.toUtf8Bytes("test2")
-			);
-			await expect(
-				payContract
-					.connect(clientWallet)
-					.pay(testTokenContract.address, 100_000, newVPID)
-			).to.be.fulfilled;
+      const balanceOfClientWalletAfterDeposit = await testTokenContract.balanceOf(
+        clientWalletAddress
+      );
+      console.log("balanceOfClientWalletAfterDeposit", balanceOfClientWalletAfterDeposit);
 
-			const eventFilter = payContract.filters.Pay(
-				testTokenContract.address,
-				clientWalletAddress,
-				newVPID
-			);
+      await expect(
+        payContract
+          .connect(clientWallet)
+          .deposit(
+            "0x0000000000000000000000000000000000000000",
+            ethers.utils.parseEther("0.0001"),
+            vpID,
+            {
+              value: ethers.utils.parseEther("0.0001"),
+            }
+          )
+      ).to.be.revertedWith("vpID is already used");
 
-			const event = await payContract.queryFilter(eventFilter);
-			expect(event.length).to.be.equal(1);
-			expect(event[0].args?.value).to.be.equal(100_000);
-			expect(event[0].args?.token).to.be.equal(testTokenContract.address);
-		});
+      await expect(
+        payContract
+          .connect(clientWallet)
+          .deposit(
+            "0x0000000000000000000000000000000000000000",
+            ethers.utils.parseEther("0.0001"),
+            vpID2,
+            {
+              value: ethers.utils.parseEther("0.0001"),
+            }
+          )
+      ).to.be.not.reverted;
+
+      await expect(
+        payContract
+          .connect(clientWallet)
+          .deposit(
+            "0x0000000000000000000000000000000000000000",
+            ethers.utils.parseEther("0.0001"),
+            vpID3,
+            {
+              value: ethers.utils.parseEther("0.0001"),
+            }
+          )
+      ).to.be.fulfilled;
+
+      await expect(
+        depositFactoryContract
+          .connect(validatorRoleAccount)
+          .setPayReceiveStatus(vpID2, sellerWalletAddress)
+      ).to.be.not.reverted;
+
+      await expect(
+        payContract
+          .connect(sellerWallet)
+          .withdrawFund("0x0000000000000000000000000000000000000000",  ethers.utils.parseEther("0.0001"))
+      ).to.be.not.reverted;
+     
+      await expect(
+        payContract
+          .connect(clientWallet)
+          .refund("0x0000000000000000000000000000000000000000")
+      ).to.be.not.reverted;
+
+      await expect(
+        depositFactoryContract
+          .connect(validatorRoleAccount)
+          .setPayReceiveStatus(vpID3, sellerWalletAddress)
+      ).to.be.revertedWith("This deposit item is not exist!");
+
+      await expect(
+        payContract
+          .connect(clientWallet)
+          .refundAll(["0x0000000000000000000000000000000000000000"])
+      ).to.be.not.reverted;
+    });
 
     it("check client create deposit contract", async () => {
       const currentTimestamp = await helpers.time.latest();
@@ -478,7 +508,7 @@ describe("Test multichain minting engine", () => {
       ];
       let adapterParams = ethers.utils.solidityPack(
         ["uint16", "uint256"],
-        [1, 350_000 + 25_000 * whiteList.length]
+        [1, 375_000 + 25_000 * whiteList.length]
       );
 
       const encodedPayload = ethers.utils.defaultAbiCoder.encode(
