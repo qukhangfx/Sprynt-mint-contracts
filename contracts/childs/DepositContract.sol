@@ -135,9 +135,7 @@ contract DepositContract is ReentrancyGuard {
 
         if (tokenAddress == address(0)) {
             require(msg.value >= value, "Insufficient native token balances");
-
-            // Ensure the contract has received the correct amount of native tokens
-            require(msg.value == value, "Value not equal!");
+            require(msg.value == value, "Value must be exact");
         }
 
         if (tokenAddress == address(0)) {
@@ -234,36 +232,34 @@ contract DepositContract is ReentrancyGuard {
 
     function withdrawDeposit(uint256 depositItemIndex) public {
         require(_depositItems[depositItemIndex].owner == msg.sender, "No permission!");
-        require(_depositItems[depositItemIndex].deadline < block.timestamp, "The deadline has not been exceeded!");
-        require(_isReceived[depositItemIndex] != true, "This deposit item is already received!");
+        require(
+            _depositItems[depositItemIndex].deadline < block.timestamp,
+            "The deadline has not been exceeded!"
+        );
+        require(
+            _isReceived[depositItemIndex] != true,
+            "This deposit item is already received!"
+        );
 
-        if (
-            _depositItems[depositItemIndex].owner == msg.sender &&
-            block.timestamp > _depositItems[depositItemIndex].deadline &&
-            _isReceived[depositItemIndex] != true
-        ) {
-            uint256 value = _depositItems[depositItemIndex].value;
-            if (tokenAddress == address(0)) {
-                Address.sendValue(payable(msg.sender), value);
-            } else {
-                IERC20(tokenAddress).safeTransferFrom(
-                    payable(address(this)),
-                    payable(msg.sender),
-                    value
-                );
-            }
-
-            emit WithdrawDeposit(msg.sender, depositItemIndex);
-
-            _depositItems[depositItemIndex] = DepositItemStruct({
-                owner: address(0),
-                deadline: _depositItems[depositItemIndex].deadline,
-                value: _depositItems[depositItemIndex].value,
-                amount: _depositItems[depositItemIndex].amount
-            });
+        uint256 value = _depositItems[depositItemIndex].value;
+        if (tokenAddress == address(0)) {
+            Address.sendValue(payable(msg.sender), value);
         } else {
-            revert("Invalid withdraw!");
+            IERC20(tokenAddress).safeTransferFrom(
+                payable(address(this)),
+                payable(msg.sender),
+                value
+            );
         }
+
+        emit WithdrawDeposit(msg.sender, depositItemIndex);
+
+        _depositItems[depositItemIndex] = DepositItemStruct({
+            owner: address(0),
+            deadline: _depositItems[depositItemIndex].deadline,
+            value: _depositItems[depositItemIndex].value,
+            amount: _depositItems[depositItemIndex].amount
+        });
     }
 
     function changeMintPrice(uint256 mintPrice_) public onlyPermissioned {
