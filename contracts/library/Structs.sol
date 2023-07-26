@@ -5,7 +5,4 @@ struct DepositItem {
   uint256 mintPrice;
   uint256 mintQuantity;
   address sellerAddress;
-  // uint16 dstChainId;
-  // bool isMintAvailable;
-  // uint256 deadline;
 }

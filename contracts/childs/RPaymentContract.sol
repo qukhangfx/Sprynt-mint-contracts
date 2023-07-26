@@ -4,16 +4,9 @@ pragma solidity 0.8.17;
 import {DepositFactoryContract} from "../parents/DepositFactoryContract.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
-
-/**
- * @title RPaymentContract
- * @author quockhangfuixlabs
- */
 contract RPaymentContract is AccessControl {
     bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
     bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
@@ -58,8 +51,7 @@ contract RPaymentContract is AccessControl {
 
     address private _factoryContractAddress;
 
-    address[] public supportedTokenList;
-    mapping(address => bool) public supportedTokenAddress;
+    address public token;
 
     struct RPaymentStruct {
         address seller;
@@ -68,7 +60,6 @@ contract RPaymentContract is AccessControl {
         bytes32 subscriptionId;
         uint256 timestamp;
         bool renew;
-        address token;
     }
 
     struct SetupPaymentStruct {
@@ -128,11 +119,6 @@ contract RPaymentContract is AccessControl {
         bytes32 subscriptionId
     );
 
-    event EnabledSubscription(
-        address indexed seller,
-        bytes32 indexed subscriptionId
-    );
-
     event DisabledSubscription(
         address indexed seller,
         bytes32 indexed subscriptionId
@@ -145,80 +131,11 @@ contract RPaymentContract is AccessControl {
         uint256 value
     );
 
-    bool public initialized;
-
-    address public priceFeedUSDCAddress;
-    mapping(string => address) private _priceFeedAddress;
-
-    function setPriceFeedAddress(
-        string memory symbol,
-        address priceFeed
-    ) external onlyRole(OWNER_ROLE) {
-        _priceFeedAddress[symbol] = priceFeed;
-    }
-
-    function getTokenInfo(
-        address tokenAddress_
-    ) public view returns (string memory, uint8) {
-        ERC20 token = ERC20(tokenAddress_);
-        string memory symbol = token.symbol();
-        uint8 decimals = token.decimals();
-        return (symbol, decimals);
-    }
-
-    function getLastestData(address chainLink) public view returns (int256) {
-        AggregatorV3Interface dataFeed = AggregatorV3Interface(chainLink);
-        // prettier-ignore
-        (
-            /* uint80 roundID */,
-            int answer,
-            /*uint startedAt*/,
-            /*uint timeStamp*/,
-            /*uint80 answeredInRound*/
-        ) = dataFeed.latestRoundData();
-        return answer;
-    }
-
-    function finalValueCalculate(
-        uint256 amount,
-        string memory tokenSymbol,
-        uint8 tokenDecimals
-    ) public view returns (uint256) {
-        // AggregatorV3Interface priceFeedUSDC = AggregatorV3Interface(
-        //     priceFeedUSDCAddress
-        // );
-        // (, int256 priceUSDC, , , ) = priceFeedUSDC.latestRoundData();
-
-        // AggregatorV3Interface priceFeedTarget = AggregatorV3Interface(
-        //     _priceFeedAddress[tokenSymbol]
-        // );
-        // (, int256 priceTarget, , , ) = priceFeedTarget.latestRoundData();
-
-        int256 priceUSDC = getLastestData(priceFeedUSDCAddress);
-        int256 priceTarget = getLastestData(_priceFeedAddress[tokenSymbol]);
-
-        uint256 exchangeRate = uint256(priceUSDC / priceTarget);
-
-        uint256 finalValue = (amount * exchangeRate) / (10 ** tokenDecimals);
-
-        return finalValue;
-    }
-
-    constructor(
-        address[] memory supportedTokenAddresses,
-        address factoryContractAddress_
-    ) {
-        require(!initialized, "Contract is already initialized");
-
+    constructor(address token_, address factoryContractAddress_) {
         _factoryContractAddress = factoryContractAddress_;
         _grantRole(OWNER_ROLE, msg.sender);
 
-        for (uint256 i = 0; i < supportedTokenAddresses.length; i++) {
-            supportedTokenAddress[supportedTokenAddresses[i]] = true;
-            supportedTokenList.push(supportedTokenAddresses[i]);
-        }
-
-        initialized = true;
+        token = token_;
     }
 
     function transferOwner(address newOwner) public onlyRole(OWNER_ROLE) {
@@ -226,24 +143,8 @@ contract RPaymentContract is AccessControl {
         _revokeRole(OWNER_ROLE, msg.sender);
     }
 
-    function updateSupportToken(
-        address supportedTokenAddress_,
-        bool isSupported
-    ) external onlyRole(OWNER_ROLE) {
-        supportedTokenAddress[supportedTokenAddress_] = isSupported;
-        if (isSupported) {
-            supportedTokenList.push(supportedTokenAddress_);
-        } else {
-            for (uint256 i = 0; i < supportedTokenList.length; i++) {
-                if (supportedTokenList[i] == supportedTokenAddress_) {
-                    supportedTokenList[i] = supportedTokenList[
-                        supportedTokenList.length - 1
-                    ];
-                    supportedTokenList.pop();
-                    break;
-                }
-            }
-        }
+    function setToken(address token_) public onlyRole(OWNER_ROLE) {
+        token = token_;
     }
 
     function setFactoryContractAddress(
@@ -268,10 +169,9 @@ contract RPaymentContract is AccessControl {
             value
         );
 
-        require(supportedTokenAddress[token_], "This token is not supported");
-
         if (token_ == address(0)) {
-            require(msg.value == value, "Value not equal!");
+            require(msg.value >= value, "Insufficient native token balances");
+            require(msg.value == value, "Value must be equal!");
 
             Address.sendValue(
                 payable(depositFactoryContract.getAdminWallet()),
@@ -310,15 +210,6 @@ contract RPaymentContract is AccessControl {
 
         require(lastestPayment_.renew, "Unsubscribe!");
 
-        require(
-            supportedTokenAddress[lastestPayment_.token],
-            "This token is not supported"
-        );
-
-        if (lastestPayment_.token == address(0)) {
-            revert("This token is not supported");
-        }
-
         SetupPaymentStruct memory setupPaymentStruct = setupPayment[
             lastestPayment_.seller
         ][lastestPayment_.subscriptionId];
@@ -342,27 +233,21 @@ contract RPaymentContract is AccessControl {
             lastestPayment_.value
         );
 
-        IERC20(lastestPayment_.token).safeTransferFrom(
+        IERC20(token).safeTransferFrom(
             buyer,
             depositFactoryContract.getAdminWallet(),
             platformFeePayAmount
         );
 
-        IERC20(lastestPayment_.token).safeTransferFrom(
+        IERC20(token).safeTransferFrom(
             buyer,
             lastestPayment_.seller,
             lastestPayment_.value - platformFeePayAmount
         );
 
-        lastestPayment[buyer][vpId] = RPaymentStruct({
-            seller: lastestPayment_.seller,
-            buyer: buyer,
-            value: setupPaymentStruct.value,
-            timestamp: lastestPayment_.timestamp + setupPaymentStruct.duration, // next time renew
-            subscriptionId: lastestPayment_.subscriptionId,
-            renew: true,
-            token: lastestPayment_.token
-        });
+        lastestPayment[buyer][vpId].timestamp =
+            lastestPayment_.timestamp +
+            setupPaymentStruct.duration;
 
         emit RPaymentResubscribe(
             lastestPayment_.seller,
@@ -403,17 +288,6 @@ contract RPaymentContract is AccessControl {
         emit SetupSubscription(seller, subscriptionId, value);
     }
 
-    // function enable(bytes32 subscriptionId) public {
-    //     require(
-    //         ownerOfSubscription[subscriptionId] == msg.sender,
-    //         "Not owner!"
-    //     );
-
-    //     disabledSubscription[subscriptionId] = false;
-
-    //     emit EnabledSubscription(msg.sender, subscriptionId);
-    // }
-
     function disable(bytes32 subscriptionId) public {
         require(
             ownerOfSubscription[subscriptionId] == msg.sender,
@@ -447,17 +321,10 @@ contract RPaymentContract is AccessControl {
     }
 
     function subscribe(
-        address token_,
         address seller,
         bytes32 subscriptionId,
         bytes32 vpId
     ) public payable {
-        require(supportedTokenAddress[token_], "This token is not supported");
-
-        if (token_ == address(0)) {
-            revert("This token is not supported");
-        }
-
         require(
             !disabledSubscription[subscriptionId],
             "Subscription is disabled!"
@@ -467,7 +334,7 @@ contract RPaymentContract is AccessControl {
 
         require(
             setupPayment[seller][subscriptionId].duration > 0,
-            "Subscription is not setup!"
+            "Not found!"
         );
 
         SetupPaymentStruct memory setupPaymentStruct = setupPayment[seller][
@@ -482,12 +349,12 @@ contract RPaymentContract is AccessControl {
             setupPaymentStruct.value
         );
 
-        IERC20(token_).safeTransferFrom(
+        IERC20(token).safeTransferFrom(
             msg.sender,
             depositFactoryContract.getAdminWallet(),
             platformFeePayAmount
         );
-        IERC20(token_).safeTransferFrom(
+        IERC20(token).safeTransferFrom(
             msg.sender,
             seller,
             setupPaymentStruct.value - platformFeePayAmount
@@ -499,8 +366,7 @@ contract RPaymentContract is AccessControl {
             value: setupPaymentStruct.value,
             timestamp: block.timestamp,
             subscriptionId: subscriptionId,
-            renew: true,
-            token: token_
+            renew: true
         });
 
         // Add subscriptionId to _subscriptionsOfBuyer
@@ -536,8 +402,7 @@ contract RPaymentContract is AccessControl {
             value: lastestPayment_.value,
             timestamp: lastestPayment_.timestamp,
             subscriptionId: lastestPayment_.subscriptionId,
-            renew: false,
-            token: lastestPayment_.token
+            renew: false
         });
 
         emit RPaymentUnsubscribe(
@@ -567,8 +432,7 @@ contract RPaymentContract is AccessControl {
             value: lastestPayment_.value,
             timestamp: lastestPayment_.timestamp,
             subscriptionId: lastestPayment_.subscriptionId,
-            renew: false,
-            token: lastestPayment_.token
+            renew: false
         });
 
         emit RPaymentCancel(msg.sender, buyer, vpId, subscriptionId);
@@ -598,8 +462,7 @@ contract RPaymentContract is AccessControl {
             value: lastestPayment_.value,
             timestamp: lastestPayment_.timestamp,
             subscriptionId: lastestPayment_.subscriptionId,
-            renew: false,
-            token: lastestPayment_.token
+            renew: false
         });
 
         emit RPaymentCancel(msg.sender, buyer, vpId, subscriptionId);
@@ -616,7 +479,7 @@ contract RPaymentContract is AccessControl {
     ) public view returns (address[] memory) {
         return _buyersOfSubscription[subscriptionId].values;
     }
-    
+
     function getLastestPayment(
         address buyer,
         bytes32 vpId

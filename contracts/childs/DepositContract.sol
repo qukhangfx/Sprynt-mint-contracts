@@ -135,7 +135,6 @@ contract DepositContract is ReentrancyGuard {
 
         if (tokenAddress == address(0)) {
             require(msg.value >= value, "Insufficient native token balances");
-            require(msg.value == value, "Value must be exact");
         }
 
         if (tokenAddress == address(0)) {
@@ -231,7 +230,10 @@ contract DepositContract is ReentrancyGuard {
     }
 
     function withdrawDeposit(uint256 depositItemIndex) public {
-        require(_depositItems[depositItemIndex].owner == msg.sender, "No permission!");
+        require(
+            _depositItems[depositItemIndex].owner == msg.sender,
+            "No permission!"
+        );
         require(
             _depositItems[depositItemIndex].deadline < block.timestamp,
             "The deadline has not been exceeded!"
