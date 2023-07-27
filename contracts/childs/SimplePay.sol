@@ -81,11 +81,20 @@ contract SimplePay is AccessControl, ReentrancyGuard {
         emit Received(msg.sender, msg.value);
     }
 
+    modifier onlyPermissioned() {
+        require(
+            msg.sender == seller ||
+                msg.sender == _factoryContractAddress,
+            "No permission!"
+        );
+        _;
+    }
+
     function updateDeadline(uint256 deadline_) external onlyRole(OWNER_ROLE) {
         deadline = deadline_;
     }
 
-    function updateMaxAcceptedValue(
+    function updateMaxAcceptedUsdValue(
         uint256 maxAcceptedUsdValue_
     ) external onlyRole(OWNER_ROLE) {
         maxAcceptedUsdValue = maxAcceptedUsdValue_;
@@ -94,7 +103,7 @@ contract SimplePay is AccessControl, ReentrancyGuard {
     function updateSupportToken(
         address supportedTokenAddress_,
         bool isSupported
-    ) external onlyRole(OWNER_ROLE) {
+    ) external onlyPermissioned {
         supportedTokenAddress[supportedTokenAddress_] = isSupported;
         if (isSupported) {
             supportedTokenList.push(supportedTokenAddress_);
@@ -111,6 +120,13 @@ contract SimplePay is AccessControl, ReentrancyGuard {
         }
     }
 
+    function getPrice(
+        uint256 usdValue,
+        address token
+    ) public view returns (uint256) {
+        return ChainLinkPriceFeed(_chainlinkPriceFeedAddress).convertUsdToTokenPrice(usdValue, token);
+    }
+
     function deposit(
         address token,
         uint256 usdValue,
@@ -118,13 +134,13 @@ contract SimplePay is AccessControl, ReentrancyGuard {
     ) public payable {
         require(
             usdValue <= maxAcceptedUsdValue,
-            "Value is greater than max accepted value"
+            "USD value is greater than max accepted usd value"
         );
 
-        require(supportedTokenAddress[token], "This token is not supported");
+        require(supportedTokenAddress[token], "Not supported token!");
         require(!vpIDs[vpID], "vpID is already used");
 
-        uint256 value = ChainLinkPriceFeed(_chainlinkPriceFeedAddress).convertUsdToTokenPrice(usdValue, token);
+        uint256 value = getPrice(usdValue, token);
 
         if (token == address(0)) {
             require(msg.value >= value, "Insufficient native token balances");

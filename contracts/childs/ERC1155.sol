@@ -14,6 +14,8 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard, Ownable {
     string public name;
     string public symbol;
 
+    uint256 public usdPrice;
+
     uint256 private _mintedTokens;
     address private _factoryContractAddress;
 
@@ -23,10 +25,12 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard, Ownable {
 
     function init(
         string memory tokenURI,
+        uint256 usdPrice_,
         address factoryContractAddress
     ) external {
         require(!initialized, "Contract is already initialized");
 
+        usdPrice = usdPrice_; // For easily getting the price of the NFT when create new deposit contract
         baseURI = tokenURI;
         _factoryContractAddress = factoryContractAddress;
 

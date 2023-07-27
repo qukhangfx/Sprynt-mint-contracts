@@ -63,7 +63,10 @@ contract ReceiveFactoryContract is
         }
     }
 
-    function createNftContractBySeller(string calldata tokenUri) external {
+    function createNftContractBySeller(
+        string calldata tokenUri,
+        uint256 usdPrice_
+    ) external {
         require(
             nftContracts[msg.sender] == address(0),
             "already created nft contract."
@@ -75,7 +78,7 @@ contract ReceiveFactoryContract is
         );
 
         address clone = createClone(_masterNftContractAddress);
-        ERC1155Contract(clone).init(tokenUri, address(this));
+        ERC1155Contract(clone).init(tokenUri, usdPrice_, address(this));
         nftContracts[msg.sender] = clone;
         emit CreatedNftContract(tokenUri, msg.sender, clone);
     }

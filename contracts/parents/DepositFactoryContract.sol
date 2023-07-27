@@ -319,6 +319,15 @@ contract DepositFactoryContract is
             .setChainlinkPriceFeedAddress(chainlinkPriceFeedAddress);
     }
 
+     function updateSupportTokenOfDepositContract(
+        address supportedTokenAddress_,
+        bool isSupported,
+        address depositContractAddress
+    ) external onlyContract {
+        DepositContract(payable(depositContractAddress))
+            .updateSupportToken(supportedTokenAddress_, isSupported);
+    }
+
     function addWhiteList(
         address depositContractAddress,
         address[] memory whiteList
@@ -534,7 +543,7 @@ contract DepositFactoryContract is
 
     modifier onlyPay() {
         require(
-            _payContracts[msg.sender],
+            _payContracts[payContracts[msg.sender]],
             "Only pay contracts created by this factory can call the function!"
         );
         _;
