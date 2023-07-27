@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.17;
 
+import {ChainLinkPriceFeed} from "./PriceFeed.sol";
 import {DepositFactoryContract} from "../parents/DepositFactoryContract.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 
@@ -11,47 +12,13 @@ contract RPaymentContract is AccessControl {
     bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
     bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
 
-    struct Bytes32Set {
-        bytes32[] values;
-        mapping(bytes32 => bool) isIn;
-    }
-
-    function addToBytes32Set(
-        Bytes32Set storage set,
-        bytes32 value
-    ) private returns (bool) {
-        if (set.isIn[value]) return false;
-        set.values.push(value);
-        set.isIn[value] = true;
-        return true;
-    }
-
-    struct AddressSet {
-        address[] values;
-        mapping(address => bool) isIn;
-    }
-
-    function addToAddressSet(
-        AddressSet storage set,
-        address value
-    ) private returns (bool) {
-        if (set.isIn[value]) return false;
-        set.values.push(value);
-        set.isIn[value] = true;
-        return true;
-    }
-
     mapping(bytes32 => bool) public vpIds;
-
-    mapping(bytes32 => AddressSet) private _buyersOfSubscription;
-    mapping(address => Bytes32Set) private _subscriptionsOfBuyer;
     mapping(bytes32 => address) public ownerOfSubscription;
 
     mapping(bytes32 => bool) public disabledSubscription;
 
     address private _factoryContractAddress;
-
-    address public token;
+    address private _chainlinkPriceFeedAddress;
 
     struct RPaymentStruct {
         address seller;
@@ -60,10 +27,11 @@ contract RPaymentContract is AccessControl {
         bytes32 subscriptionId;
         uint256 timestamp;
         bool renew;
+        address token;
     }
 
     struct SetupPaymentStruct {
-        uint256 value;
+        uint256 usdValue;
         uint256 duration;
     }
 
@@ -88,7 +56,7 @@ contract RPaymentContract is AccessControl {
     event SetupSubscription(
         address indexed seller,
         bytes32 indexed subscriptionId,
-        uint256 value
+        uint256 usdValue
     );
 
     event RPaymentUnsubscribe(
@@ -128,14 +96,28 @@ contract RPaymentContract is AccessControl {
         address indexed seller,
         address indexed buyer,
         bytes32 indexed vpId,
+        uint256 usdValue,
         uint256 value
     );
 
-    constructor(address token_, address factoryContractAddress_) {
-        _factoryContractAddress = factoryContractAddress_;
-        _grantRole(OWNER_ROLE, msg.sender);
+    address[] public tokenAddress;
+    mapping(address => bool) public supportedTokenAddress;
 
-        token = token_;
+    constructor(
+        address[] memory tokenAddress_,
+        address factoryContractAddress_,
+        address chainLinkPriceFeedAddress_
+    ) {
+        tokenAddress = tokenAddress_;
+
+         for (uint256 i = 0; i < tokenAddress_.length; i++) {
+            supportedTokenAddress[tokenAddress_[i]] = true;
+        }
+
+        _factoryContractAddress = factoryContractAddress_;
+        _chainlinkPriceFeedAddress = chainLinkPriceFeedAddress_;
+        
+        _grantRole(OWNER_ROLE, msg.sender);
     }
 
     function transferOwner(address newOwner) public onlyRole(OWNER_ROLE) {
@@ -143,8 +125,22 @@ contract RPaymentContract is AccessControl {
         _revokeRole(OWNER_ROLE, msg.sender);
     }
 
-    function setToken(address token_) public onlyRole(OWNER_ROLE) {
-        token = token_;
+    function updateSupportToken(
+        address supportedTokenAddress_,
+        bool isSupported
+    ) public onlyRole(OWNER_ROLE) {
+        supportedTokenAddress[supportedTokenAddress_] = isSupported;
+        if (isSupported) {
+            tokenAddress.push(supportedTokenAddress_);
+        } else {
+            for (uint256 i = 0; i < tokenAddress.length; i++) {
+                if (tokenAddress[i] == supportedTokenAddress_) {
+                    tokenAddress[i] = tokenAddress[tokenAddress.length - 1];
+                    tokenAddress.pop();
+                    break;
+                }
+            }
+        }
     }
 
     function setFactoryContractAddress(
@@ -153,10 +149,12 @@ contract RPaymentContract is AccessControl {
         _factoryContractAddress = factoryContractAddress_;
     }
 
+    /** PAY LINK **/
+
     function pay(
-        address token_,
+        address token,
         address seller,
-        uint256 value,
+        uint256 usdValue,
         bytes32 vpId
     ) public payable {
         require(!vpIds[vpId], "Already paid!");
@@ -165,26 +163,30 @@ contract RPaymentContract is AccessControl {
             _factoryContractAddress
         );
 
+        (, uint256 newPrice) = ChainLinkPriceFeed(_chainlinkPriceFeedAddress).convertUsdToTokenPrice(usdValue, token);
+        uint256 value = newPrice;
+        
         uint256 platformFeePayAmount = depositFactoryContract.calcPayFeeAmount(
             value
         );
 
-        if (token_ == address(0)) {
+        if (token == address(0)) {
             require(msg.value >= value, "Insufficient native token balances");
-            require(msg.value == value, "Value must be equal!");
 
             Address.sendValue(
                 payable(depositFactoryContract.getAdminWallet()),
                 platformFeePayAmount
             );
+
             Address.sendValue(payable(seller), value - platformFeePayAmount);
         } else {
-            IERC20(token_).safeTransferFrom(
+            IERC20(token).safeTransferFrom(
                 msg.sender,
                 depositFactoryContract.getAdminWallet(),
                 platformFeePayAmount
             );
-            IERC20(token_).safeTransferFrom(
+
+            IERC20(token).safeTransferFrom(
                 msg.sender,
                 seller,
                 value - platformFeePayAmount
@@ -194,13 +196,141 @@ contract RPaymentContract is AccessControl {
         vpIds[vpId] = true;
 
         vpInfo[vpId] = VpInfo({
-            token: token_,
+            token: token,
             seller: seller,
             value: value,
             blockNumber: block.number
         });
 
-        emit Paylink(seller, msg.sender, vpId, value);
+        emit Paylink(seller, msg.sender, vpId, usdValue, value);
+    }
+
+    /** RECURRING PAYMENT **/
+
+    function setupByValidator(
+        address seller,
+        bytes32 subscriptionId,
+        uint256 usdValue,
+        uint256 duration
+    ) public {
+        require(
+            setupPayment[seller][subscriptionId].duration == 0,
+            "Already setup!"
+        );
+
+        require(duration > 0, "Duration must be greater than 0!");
+
+        DepositFactoryContract depositFactoryContract = DepositFactoryContract(
+            _factoryContractAddress
+        );
+
+        require(
+            depositFactoryContract.hasRole(VALIDATOR_ROLE, msg.sender),
+            "Call is not the validator!"
+        );
+
+        setupPayment[seller][subscriptionId] = SetupPaymentStruct({
+            usdValue: usdValue,
+            duration: duration
+        });
+
+        ownerOfSubscription[subscriptionId] = seller;
+
+        emit SetupSubscription(seller, subscriptionId, usdValue);
+    }
+
+    function setup(
+        bytes32 subscriptionId,
+        uint256 usdValue,
+        uint256 duration
+    ) public {
+        require(
+            setupPayment[msg.sender][subscriptionId].duration == 0,
+            "Already setup!"
+        );
+
+        require(duration > 0, "Duration must be greater than 0!");
+
+        setupPayment[msg.sender][subscriptionId] = SetupPaymentStruct({
+            usdValue: usdValue,
+            duration: duration
+        });
+
+        ownerOfSubscription[subscriptionId] = msg.sender;
+
+        emit SetupSubscription(msg.sender, subscriptionId, usdValue);
+    }
+
+    function subscribe(
+        address seller,
+        bytes32 subscriptionId,
+        bytes32 vpId,
+        address token
+    ) public payable {
+        require(
+            !disabledSubscription[subscriptionId],
+            "Subscription is disabled!"
+        );
+
+        require(!vpIds[vpId], "Already subscribe!");
+
+        require(
+            setupPayment[seller][subscriptionId].duration > 0,
+            "Not found!"
+        );
+
+        SetupPaymentStruct memory setupPaymentStruct = setupPayment[seller][
+            subscriptionId
+        ];
+
+        DepositFactoryContract depositFactoryContract = DepositFactoryContract(
+            _factoryContractAddress
+        );
+
+        require(
+            token != address(0),
+            "Not supported native token!"
+        );
+
+        require(supportedTokenAddress[token], "Not supported token!");
+
+        (, uint256 newPrice) = ChainLinkPriceFeed(_chainlinkPriceFeedAddress).convertUsdToTokenPrice(setupPaymentStruct.usdValue, token);
+        uint256 value = newPrice;
+
+        uint256 platformFeePayAmount = depositFactoryContract.calcPayFeeAmount(
+            value
+        );
+
+        IERC20(token).safeTransferFrom(
+            msg.sender,
+            depositFactoryContract.getAdminWallet(),
+            platformFeePayAmount
+        );
+        IERC20(token).safeTransferFrom(
+            msg.sender,
+            seller,
+            value - platformFeePayAmount
+        );
+
+        lastestPayment[msg.sender][vpId] = RPaymentStruct({
+            seller: seller,
+            buyer: msg.sender,
+            value: value,
+            timestamp: block.timestamp,
+            subscriptionId: subscriptionId,
+            renew: true,
+            token: token
+        });
+
+        vpIds[vpId] = true;
+
+        emit RPaymentSubscribe(
+            seller,
+            msg.sender,
+            subscriptionId,
+            vpId,
+            value
+        );
     }
 
     function renew(address buyer, bytes32 vpId) public payable {
@@ -224,6 +354,11 @@ contract RPaymentContract is AccessControl {
                 setupPaymentStruct.duration,
             "Not yet time!"
         );
+
+        address token = lastestPayment_.token;
+
+        require(token != address(0), "Not supported native token!");
+        require(supportedTokenAddress[token], "Not supported token!");
 
         DepositFactoryContract depositFactoryContract = DepositFactoryContract(
             _factoryContractAddress
@@ -257,139 +392,10 @@ contract RPaymentContract is AccessControl {
         );
     }
 
-    function setupByValidator(
-        address seller,
-        bytes32 subscriptionId,
-        uint256 value,
-        uint256 duration
-    ) public {
-        require(
-            setupPayment[seller][subscriptionId].duration == 0,
-            "Already setup!"
-        );
-
-        require(duration > 0, "Duration must be greater than 0!");
-
-        DepositFactoryContract depositFactoryContract = DepositFactoryContract(
-            _factoryContractAddress
-        );
-
-        require(
-            depositFactoryContract.hasRole(VALIDATOR_ROLE, msg.sender),
-            "Not validator!"
-        );
-
-        setupPayment[seller][subscriptionId] = SetupPaymentStruct({
-            value: value,
-            duration: duration
-        });
-        ownerOfSubscription[subscriptionId] = seller;
-
-        emit SetupSubscription(seller, subscriptionId, value);
-    }
-
-    function disable(bytes32 subscriptionId) public {
-        require(
-            ownerOfSubscription[subscriptionId] == msg.sender,
-            "Not owner!"
-        );
-
-        disabledSubscription[subscriptionId] = true;
-
-        emit DisabledSubscription(msg.sender, subscriptionId);
-    }
-
-    function setup(
-        bytes32 subscriptionId,
-        uint256 value,
-        uint256 duration
-    ) public {
-        require(
-            setupPayment[msg.sender][subscriptionId].duration == 0,
-            "Already setup!"
-        );
-
-        require(duration > 0, "Duration must be greater than 0!");
-
-        setupPayment[msg.sender][subscriptionId] = SetupPaymentStruct({
-            value: value,
-            duration: duration
-        });
-        ownerOfSubscription[subscriptionId] = msg.sender;
-
-        emit SetupSubscription(msg.sender, subscriptionId, value);
-    }
-
-    function subscribe(
-        address seller,
-        bytes32 subscriptionId,
-        bytes32 vpId
-    ) public payable {
-        require(
-            !disabledSubscription[subscriptionId],
-            "Subscription is disabled!"
-        );
-
-        require(!vpIds[vpId], "Already subscribe!");
-
-        require(
-            setupPayment[seller][subscriptionId].duration > 0,
-            "Not found!"
-        );
-
-        SetupPaymentStruct memory setupPaymentStruct = setupPayment[seller][
-            subscriptionId
-        ];
-
-        DepositFactoryContract depositFactoryContract = DepositFactoryContract(
-            _factoryContractAddress
-        );
-
-        uint256 platformFeePayAmount = depositFactoryContract.calcPayFeeAmount(
-            setupPaymentStruct.value
-        );
-
-        IERC20(token).safeTransferFrom(
-            msg.sender,
-            depositFactoryContract.getAdminWallet(),
-            platformFeePayAmount
-        );
-        IERC20(token).safeTransferFrom(
-            msg.sender,
-            seller,
-            setupPaymentStruct.value - platformFeePayAmount
-        );
-
-        lastestPayment[msg.sender][vpId] = RPaymentStruct({
-            seller: seller,
-            buyer: msg.sender,
-            value: setupPaymentStruct.value,
-            timestamp: block.timestamp,
-            subscriptionId: subscriptionId,
-            renew: true
-        });
-
-        // Add subscriptionId to _subscriptionsOfBuyer
-        addToBytes32Set(_subscriptionsOfBuyer[msg.sender], subscriptionId);
-
-        // Add buyer to _buyersOfSubscription
-        addToAddressSet(_buyersOfSubscription[subscriptionId], msg.sender);
-
-        vpIds[vpId] = true;
-
-        emit RPaymentSubscribe(
-            seller,
-            msg.sender,
-            subscriptionId,
-            vpId,
-            setupPaymentStruct.value
-        );
-    }
-
     function unsubscribe(bytes32 vpId) public {
         require(
             lastestPayment[msg.sender][vpId].buyer == msg.sender,
-            "Not found subscription!"
+            "Caller is not the buyer!"
         );
 
         RPaymentStruct memory lastestPayment_ = lastestPayment[msg.sender][
@@ -402,7 +408,8 @@ contract RPaymentContract is AccessControl {
             value: lastestPayment_.value,
             timestamp: lastestPayment_.timestamp,
             subscriptionId: lastestPayment_.subscriptionId,
-            renew: false
+            renew: false,
+            token: lastestPayment_.token
         });
 
         emit RPaymentUnsubscribe(
@@ -410,6 +417,17 @@ contract RPaymentContract is AccessControl {
             lastestPayment_.subscriptionId,
             vpId
         );
+    }
+
+    function disable(bytes32 subscriptionId) public {
+        require(
+            ownerOfSubscription[subscriptionId] == msg.sender,
+            "Caller is not the owner!"
+        );
+
+        disabledSubscription[subscriptionId] = true;
+
+        emit DisabledSubscription(msg.sender, subscriptionId);
     }
 
     function cancelBySeller(
@@ -423,7 +441,7 @@ contract RPaymentContract is AccessControl {
 
         require(
             ownerOfSubscription[subscriptionId] == msg.sender,
-            "Not found subscription!"
+            "Caller is not the owner!" 
         );
 
         lastestPayment[buyer][vpId] = RPaymentStruct({
@@ -432,7 +450,8 @@ contract RPaymentContract is AccessControl {
             value: lastestPayment_.value,
             timestamp: lastestPayment_.timestamp,
             subscriptionId: lastestPayment_.subscriptionId,
-            renew: false
+            renew: false,
+            token: lastestPayment_.token
         });
 
         emit RPaymentCancel(msg.sender, buyer, vpId, subscriptionId);
@@ -453,7 +472,7 @@ contract RPaymentContract is AccessControl {
 
         require(
             depositFactoryContract.hasRole(VALIDATOR_ROLE, msg.sender),
-            "Not validator!"
+            "Caller is not the validator!"
         );
 
         lastestPayment[buyer][vpId] = RPaymentStruct({
@@ -462,22 +481,11 @@ contract RPaymentContract is AccessControl {
             value: lastestPayment_.value,
             timestamp: lastestPayment_.timestamp,
             subscriptionId: lastestPayment_.subscriptionId,
-            renew: false
+            renew: false,
+            token: lastestPayment_.token
         });
 
         emit RPaymentCancel(msg.sender, buyer, vpId, subscriptionId);
-    }
-
-    function getAllSubscriptionsOfBuyer(
-        address buyer
-    ) public view returns (bytes32[] memory) {
-        return _subscriptionsOfBuyer[buyer].values;
-    }
-
-    function getAllBuyersOfSubscription(
-        bytes32 subscriptionId
-    ) public view returns (address[] memory) {
-        return _buyersOfSubscription[subscriptionId].values;
     }
 
     function getLastestPayment(

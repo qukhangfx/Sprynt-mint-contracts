@@ -6,12 +6,9 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import {ReceiveFactoryContract} from "../parents/ReceiveFactoryContract.sol";
 
 contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard, Ownable {
-    bytes32 public constant FACTORY_CONTRACT_ROLE =
-        keccak256("FACTORY_CONTRACT_ROLE");
-    bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
+    bytes32 public constant FACTORY_CONTRACT_ROLE = keccak256("FACTORY_CONTRACT_ROLE");
 
     string private baseURI;
     string public name;
@@ -29,8 +26,10 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard, Ownable {
         address factoryContractAddress
     ) external {
         require(!initialized, "Contract is already initialized");
+
         baseURI = tokenURI;
         _factoryContractAddress = factoryContractAddress;
+
         _grantRole(FACTORY_CONTRACT_ROLE, factoryContractAddress);
         _setURI(tokenURI);
 
@@ -40,12 +39,6 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard, Ownable {
         _transferOwnership(tx.origin);
 
         initialized = true;
-    }
-
-    function supportsInterface(
-        bytes4 interfaceId
-    ) public view override(AccessControl, ERC1155) returns (bool) {
-        return super.supportsInterface(interfaceId);
     }
 
     function setBaseURI(string calldata _uri) external onlyPermissioned {
@@ -76,14 +69,9 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard, Ownable {
     }
 
     modifier onlyPermissioned() {
-         ReceiveFactoryContract receiveFactoryContract = ReceiveFactoryContract(
-            _factoryContractAddress
-         );
-
         require(
             owner() == _msgSender() ||
-                hasRole(FACTORY_CONTRACT_ROLE, msg.sender)
-                || receiveFactoryContract.hasRole(VALIDATOR_ROLE, msg.sender),
+                hasRole(FACTORY_CONTRACT_ROLE, msg.sender),
             "Sender does not have the required role"
         );
         _;
@@ -121,5 +109,11 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard, Ownable {
             string(
                 abi.encodePacked(this.getBaseURI(), Strings.toString(tokenId))
             );
+    }
+
+    function supportsInterface(
+        bytes4 interfaceId
+    ) public view override(AccessControl, ERC1155) returns (bool) {
+        return super.supportsInterface(interfaceId);
     }
 }

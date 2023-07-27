@@ -4,16 +4,19 @@ import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
 
 import "../library/Domain.sol";
 import {DepositItem} from "../library/Structs.sol";
 import {DepositFactoryContract} from "../parents/DepositFactoryContract.sol";
 
+import {ChainLinkPriceFeed} from "./PriceFeed.sol";
+
 import "hardhat/console.sol";
 
 contract DepositContract is ReentrancyGuard {
     address private _sellerAddress;
-    address public tokenAddress;
+    address[] public tokenAddress;
     uint256 public dstChainId;
     uint256 public mintPrice;
     uint256 public whiteListMintPrice;
@@ -21,7 +24,9 @@ contract DepositContract is ReentrancyGuard {
     uint256 public maxMintQuantity;
     uint256 public totalSupply;
     uint256 public deadline;
+    
     address private _factoryContractAddress;
+    address private _chainlinkPriceFeedAddress;
 
     uint256 public depositDeadline;
 
@@ -35,11 +40,22 @@ contract DepositContract is ReentrancyGuard {
 
     mapping(uint256 => bool) private _isReceived;
 
+    mapping(address => bool) public supportedTokenAddress;
+
+     mapping(address => uint256[]) private _tokensOfAccounts;
+
+    mapping(uint256 => address) private _owners;
+
+    mapping(uint256 => string) private _tokenURIs;
+
+    string private _baseURI = "";
+
     struct DepositItemStruct {
         address owner;
         uint256 deadline;
         uint256 value;
         uint256 amount;
+        address token;
     }
     uint256 private _depositItemCounter = 0;
     mapping(uint256 => DepositItemStruct) public _depositItems;
@@ -48,24 +64,26 @@ contract DepositContract is ReentrancyGuard {
     using Address for address payable;
 
     event Received(address sender, uint256 value);
+    event Transferred(address from, address to, uint256 tokenId);
 
-    event WithdrawDeposit(address sender, uint256 depositItemId);
+    event WithdrawDeposit(address sender, uint256 depositItemIndex);
 
     event Deposit(
-        uint256 depositItemId,
+        uint256 depositItemIndex,
         address owner,
         uint256 amount,
         uint256 value,
-        uint256 deadline
+        uint256 deadline,
+        address token
     );
 
-    event SetReceiveStatus(address sender, uint256 depositItemId);
+    event SetReceiveStatus(address sender, uint256 depositItemIndex);
 
     constructor() {}
 
     function init(
         address sellerAddress,
-        address tokenAddress_,
+        address[] memory tokenAddress_,
         uint256 dstChainId_,
         uint256 mintPrice_,
         uint256 whiteListMintPrice_,
@@ -75,9 +93,11 @@ contract DepositContract is ReentrancyGuard {
         uint256 deadline_,
         uint256 depositDeadline_,
         address factoryContractAddress,
-        address[] memory whiteList_
+        address[] memory whiteList_,
+        address chainlinkPriceFeedAddress
     ) external {
         require(!initialized, "Contract is already initialized");
+
         currentStage = 0;
         _sellerAddress = sellerAddress;
         tokenAddress = tokenAddress_;
@@ -89,21 +109,37 @@ contract DepositContract is ReentrancyGuard {
         totalSupply = totalSupply_;
         deadline = deadline_;
         depositDeadline = depositDeadline_;
-        _factoryContractAddress = factoryContractAddress;
+        
         if (whiteList_.length > 0) {
             for (uint256 i = 0; i < whiteList_.length; i++) {
                 whiteList[whiteList_[i]] = true;
             }
         }
 
+        for (uint256 i = 0; i < tokenAddress_.length; i++) {
+            supportedTokenAddress[tokenAddress_[i]] = true;
+        }
+
+        _factoryContractAddress = factoryContractAddress;
+        _chainlinkPriceFeedAddress = chainlinkPriceFeedAddress;
+
         initialized = true;
+    }
+
+    function setChainlinkPriceFeedAddress(
+        address chainlinkPriceFeedAddress
+    ) public onlyFactoryContract {
+        _chainlinkPriceFeedAddress = chainlinkPriceFeedAddress;
     }
 
     receive() external payable {
         emit Received(msg.sender, msg.value);
     }
 
-    function mint(DepositItem calldata depositItem) public payable {
+    function mint(
+        DepositItem calldata depositItem,
+        address token
+    ) public payable {
         require(block.timestamp <= deadline, "The deadline has been exceeded!");
 
         require(currentStage != 0, "We have not ready yet!");
@@ -131,16 +167,19 @@ contract DepositContract is ReentrancyGuard {
             require(depositItem.mintPrice == mintPrice, "Invalid mint price!");
         }
 
-        uint256 value = depositItem.mintPrice * depositItem.mintQuantity;
+        require(supportedTokenAddress[token] == true, "Not supported token!");
 
-        if (tokenAddress == address(0)) {
+        (, uint256 newPrice) = ChainLinkPriceFeed(_chainlinkPriceFeedAddress).convertUsdToTokenPrice(depositItem.mintPrice, token);
+        uint256 value = newPrice * depositItem.mintQuantity;
+
+        if (token == address(0)) {
             require(msg.value >= value, "Insufficient native token balances");
         }
 
-        if (tokenAddress == address(0)) {
+        if (token == address(0)) {
             Address.sendValue(payable(address(this)), msg.value);
         } else {
-            IERC20(tokenAddress).safeTransferFrom(
+            IERC20(token).safeTransferFrom(
                 tx.origin,
                 payable(address(this)),
                 value
@@ -152,7 +191,8 @@ contract DepositContract is ReentrancyGuard {
             owner: msg.sender,
             deadline: block.timestamp + depositDeadline,
             value: value,
-            amount: depositItem.mintQuantity
+            amount: depositItem.mintQuantity,
+            token: token
         });
         _depositItems[currentIndex] = newDepositItem;
 
@@ -161,7 +201,8 @@ contract DepositContract is ReentrancyGuard {
             msg.sender,
             depositItem.mintQuantity,
             value,
-            block.timestamp + depositDeadline
+            block.timestamp + depositDeadline,
+            token
         );
     }
 
@@ -174,59 +215,69 @@ contract DepositContract is ReentrancyGuard {
         _;
     }
 
-    function setReceiveStatus(uint256 depositItemId) external {
+    modifier onlyFactoryContract() {
+        require(
+            msg.sender == _factoryContractAddress,
+            "Caller is not a factory contract"
+        );
+        _;
+    }
+
+    function setReceiveStatus(uint256 depositItemIndex) external {
         require(
             msg.sender == _factoryContractAddress,
             "Caller is not a factory contract"
         );
 
         require(
-            _isReceived[depositItemId] == false,
+            _isReceived[depositItemIndex] == false,
             "This deposit item is already received!"
         );
 
         require(
-            _depositItems[depositItemId].owner != address(0),
+            _depositItems[depositItemIndex].owner != address(0),
             "This deposit item is not exist!"
         );
 
-        _isReceived[depositItemId] = true;
+        _isReceived[depositItemIndex] = true;
 
         DepositFactoryContract depositFactoryContract = DepositFactoryContract(
             _factoryContractAddress
         );
 
-        uint256 value = _depositItems[depositItemId].value;
+        uint256 value = _depositItems[depositItemIndex].value;
 
         uint256 platformFeeMintAmount = depositFactoryContract
             .calcMintFeeAmount(value);
 
         uint256 userProfit = value - platformFeeMintAmount;
 
-        if (tokenAddress == address(0)) {
+        address token = _depositItems[depositItemIndex].token;
+
+        if (token == address(0)) {
             Address.sendValue(
                 payable(depositFactoryContract.getAdminWallet()),
                 platformFeeMintAmount
             );
             Address.sendValue(payable(_sellerAddress), userProfit);
         } else {
-            IERC20(tokenAddress).safeTransferFrom(
+            IERC20(token).safeTransferFrom(
                 payable(address(this)),
                 depositFactoryContract.getAdminWallet(),
                 platformFeeMintAmount
             );
-            IERC20(tokenAddress).safeTransferFrom(
+            IERC20(token).safeTransferFrom(
                 payable(address(this)),
                 _sellerAddress,
                 userProfit
             );
         }
 
-        _mintedTokens += _depositItems[depositItemId].amount;
+        _mintedTokens += _depositItems[depositItemIndex].amount;
 
         require(_mintedTokens <= totalSupply, "Exceed total supply!");
 
-        emit SetReceiveStatus(msg.sender, depositItemId);
+        emit SetReceiveStatus(msg.sender, depositItemIndex);
     }
 
     function withdrawDeposit(uint256 depositItemIndex) public {
@@ -244,10 +295,12 @@ contract DepositContract is ReentrancyGuard {
         );
 
         uint256 value = _depositItems[depositItemIndex].value;
-        if (tokenAddress == address(0)) {
+        address token = _depositItems[depositItemIndex].token;
+
+        if (token == address(0)) {
             Address.sendValue(payable(msg.sender), value);
         } else {
-            IERC20(tokenAddress).safeTransferFrom(
+            IERC20(token).safeTransferFrom(
                 payable(address(this)),
                 payable(msg.sender),
                 value
@@ -260,8 +313,171 @@ contract DepositContract is ReentrancyGuard {
             owner: address(0),
             deadline: _depositItems[depositItemIndex].deadline,
             value: _depositItems[depositItemIndex].value,
-            amount: _depositItems[depositItemIndex].amount
+            amount: _depositItems[depositItemIndex].amount,
+            token: _depositItems[depositItemIndex].token
         });
+    }
+
+    /*** ERC-721 FUNCTIONS */
+
+    function setTokenURI(uint256 tokenId, string memory uri) external {
+        require(
+            msg.sender == _factoryContractAddress,
+            "Caller is not a factory contract"
+        );
+        _tokenURIs[tokenId] = uri;
+    }
+
+    function setBaseURI(string memory baseURI_) external {
+        require(
+            msg.sender == _factoryContractAddress,
+            "Do not have permission"
+        );
+        _baseURI = baseURI_;
+    }
+
+    function setOwner(address owner, uint256 tokenId) external {
+        require(
+            msg.sender == _factoryContractAddress,
+            "Do not have permission"
+        );
+        _owners[tokenId] = owner;
+        _tokensOfAccounts[owner].push(tokenId);
+    }
+
+    function baseURI() external view returns (string memory) {
+        return _baseURI;
+    }
+
+    function tokenURI(uint256 tokenId) external view returns (string memory) {
+        if (bytes(_tokenURIs[tokenId]).length == 0) {
+            return
+                string(abi.encodePacked(_baseURI, Strings.toString(tokenId)));
+        } else {
+            return _tokenURIs[tokenId];
+        }
+    }
+
+    function balanceOf(address owner) external view returns (uint256 balance) {
+        return _tokensOfAccounts[owner].length;
+    }
+
+    function ownerOf(uint256 tokenId) external view returns (address owner) {
+        return _owners[tokenId];
+    }
+
+    function transfer(address from, address to, uint256 tokenId) external {
+        require(
+            msg.sender == _factoryContractAddress,
+            "Do not have permission"
+        );
+        require(
+            _owners[tokenId] == from,
+            "This account does not have the required tokenID"
+        );
+        _owners[tokenId] = to;
+        for (uint256 i = 0; i < _tokensOfAccounts[from].length; i++) {
+            if (_tokensOfAccounts[from][i] == tokenId) {
+                delete _tokensOfAccounts[from][i];
+            }
+        }
+        _tokensOfAccounts[to].push(tokenId);
+    }
+
+    function safeTransferFrom(
+        address from,
+        address to,
+        uint256 tokenId
+    ) external {
+        require(
+            _owners[tokenId] == from,
+            "This account does not have the required tokenID"
+        );
+        emit Transferred(from, to, tokenId);
+    }
+
+    function burn(address owner, uint256 tokenId) external {
+        require(
+            msg.sender == _factoryContractAddress,
+            "Do not have permission"
+        );
+        require(
+            _owners[tokenId] == owner,
+            "This account does not have the required tokenID"
+        );
+        _owners[tokenId] = address(0);
+
+        for (uint256 i = 0; i < _tokensOfAccounts[owner].length; i++) {
+            if (_tokensOfAccounts[owner][i] == tokenId) {
+                delete _tokensOfAccounts[owner][i];
+            }
+        }
+    }
+
+    /** WITHDRAW */
+
+    function withdraw(address token, uint256 value) external {
+        require(
+            msg.sender == _factoryContractAddress,
+            "Caller is not a factory contract"
+        );
+        DepositFactoryContract depositFactoryContract = DepositFactoryContract(
+            _factoryContractAddress
+        );
+        if (token == address(0)) {
+            Address.sendValue(
+                payable(depositFactoryContract.getAdminWallet()),
+                value
+            );
+        } else {
+            IERC20(token).safeTransferFrom(
+                address(this),
+                depositFactoryContract.getAdminWallet(),
+                value
+            );
+        }
+    }
+
+    function withdrawAll(address token) external {
+        require(
+            msg.sender == _factoryContractAddress,
+            "Caller is not a factory contract"
+        );
+        DepositFactoryContract depositFactoryContract = DepositFactoryContract(
+            _factoryContractAddress
+        );
+        if (token == address(0)) {
+            Address.sendValue(
+                payable(depositFactoryContract.getAdminWallet()),
+                address(this).balance
+            );
+        } else {
+            IERC20(token).safeTransferFrom(
+                address(this),
+                payable(depositFactoryContract.getAdminWallet()),
+                IERC20(token).balanceOf(address(this))
+            );
+        }
+    }
+
+    /** UTILS */
+
+    function updateSupportToken(
+        address supportedTokenAddress_,
+        bool isSupported
+    ) public onlyPermissioned {
+        supportedTokenAddress[supportedTokenAddress_] = isSupported;
+        if (isSupported) {
+            tokenAddress.push(supportedTokenAddress_);
+        } else {
+            for (uint256 i = 0; i < tokenAddress.length; i++) {
+                if (tokenAddress[i] == supportedTokenAddress_) {
+                    tokenAddress[i] = tokenAddress[tokenAddress.length - 1];
+                    tokenAddress.pop();
+                    break;
+                }
+            }
+        }
     }
 
     function changeMintPrice(uint256 mintPrice_) public onlyPermissioned {
@@ -299,10 +515,6 @@ contract DepositContract is ReentrancyGuard {
         whiteListMintPrice = whiteListMintPrice_;
     }
 
-    function getTotalMintedToken() public view returns (uint256) {
-        return _mintedTokens;
-    }
-
     function addWhiteList(address[] memory buyers) public onlyPermissioned {
         if (buyers.length > 0) {
             for (uint256 i = 0; i < buyers.length; i++) {
@@ -321,6 +533,10 @@ contract DepositContract is ReentrancyGuard {
 
     function changeStage(uint256 stage) public onlyPermissioned {
         currentStage = stage;
+    }
+
+     function getTotalMintedToken() public view returns (uint256) {
+        return _mintedTokens;
     }
 
     function getFactoryContractAddress() public view returns (address) {
@@ -345,40 +561,14 @@ contract DepositContract is ReentrancyGuard {
         return depositItems;
     }
 
-    function getDepositItemById(
-        uint256 depositItemId
+    function getDepositItemByIndex(
+        uint256 depositItemIndex
     ) public view returns (DepositItemStruct memory) {
-        require(depositItemId > 0, "Invalid deposit item id!");
+        require(depositItemIndex > 0, "Invalid deposit item id!");
         require(
-            depositItemId <= _depositItemCounter,
+            depositItemIndex <= _depositItemCounter,
             "Invalid deposit item id!"
         );
-        return _depositItems[depositItemId];
-    }
-
-    function getAllInfo()
-        public
-        view
-        returns (
-            uint256,
-            uint256,
-            uint256,
-            uint256,
-            uint256,
-            uint256,
-            uint256,
-            uint256
-        )
-    {
-        return (
-            maxMintQuantity,
-            depositDeadline,
-            totalSupply,
-            mintPrice,
-            whiteListMintPrice,
-            deadline,
-            _mintedTokens,
-            currentStage
-        );
+        return _depositItems[depositItemIndex];
     }
 }

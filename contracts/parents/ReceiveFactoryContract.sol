@@ -36,25 +36,32 @@ contract ReceiveFactoryContract is
     mapping(address => address) public nftContracts; // seller => nftContract address
     address private _masterNftContractAddress;
 
-    modifier onlyValidator() {
-        require(
-            hasRole(VALIDATOR_ROLE, msg.sender),
-            "Caller is not a validator"
-        );
-        _;
-    }
-
-    function setupValidatorRole(address account) external onlyOwner {
-        _grantRole(VALIDATOR_ROLE, account);
-    }
-
-    function revokeValidatorRole(address account) external onlyOwner {
-        _revokeRole(VALIDATOR_ROLE, account);
-    }
-
     constructor(
         address _layerZeroEndpoint
     ) NonblockingLzApp(_layerZeroEndpoint) {}
+
+    /** NFT CONTRACT **/
+    
+    function mint(
+        address seller,
+        address to,
+        uint256 amount,
+        bytes memory data
+    ) public onlyValidator {
+        require(
+            nftContracts[seller] != address(0),
+            "nft contract is not created."
+        );
+        if (amount == 1) {
+            ERC1155Contract(nftContracts[seller]).mintToken(to, data);
+        } else {
+            ERC1155Contract(nftContracts[seller]).mintBatchToken(
+                to,
+                amount,
+                data
+            );
+        }
+    }
 
     function createNftContractBySeller(string calldata tokenUri) external {
         require(
@@ -79,113 +86,135 @@ contract ReceiveFactoryContract is
         _masterNftContractAddress = masterNftContractAddress;
     }
 
-    function mint(
-        address seller,
-        address to,
-        uint256 amount,
-        bytes memory data
-    ) public onlyValidator {
-        require(
-            nftContracts[seller] != address(0),
-            "nft contract is not created."
-        );
-        if (amount == 1) {
-            ERC1155Contract(nftContracts[seller]).mintToken(to, data);
-        } else {
-            ERC1155Contract(nftContracts[seller]).mintBatchToken(
-                to,
-                amount,
-                data
-            );
-        }
-    }
-
-    function createPayContractBySeller(
-        uint256 maxAcceptedValue,
-        address[] memory tokenAddresses,
-        uint256 deadline,
-        uint16 dstChainId,
-        bytes calldata adapterParams
-    ) public payable {
-        bytes memory encodedPayload = abi.encode(
-            1,
-            maxAcceptedValue,
-            tokenAddresses,
-            msg.sender,
-            deadline
-        );
-
-        (uint nativeFee, uint zroFee) = estimateFee(
-            dstChainId,
-            false,
-            adapterParams,
-            encodedPayload
-        );
-
-        require(msg.value >= nativeFee, "Insufficient fee");
-
-        _lzSend(
-            dstChainId,
-            encodedPayload,
-            payable(msg.sender),
-            address(0x0),
-            adapterParams,
-            nativeFee
-        );
-    }
-
-    function createDepositContractBySeller(
-        uint16 dstChainId,
-        address sellerAddress,
-        address tokenAddress,
-        uint16 depositContractDstChainId,
-        uint256 mintPrice,
-        uint256 whiteListMintPrice,
-        uint256 minMintQuantity,
-        uint256 maxMintQuantity,
-        uint256 totalSupply,
-        uint256 deadline,
-        uint256 depositDeadline,
-        address[] memory whiteList,
-        bytes calldata adapterParams
-    ) external payable {
-        bytes memory encodedPayload = abi.encode(
-            2,
-            sellerAddress,
-            tokenAddress,
-            depositContractDstChainId,
-            mintPrice,
-            whiteListMintPrice,
-            minMintQuantity,
-            maxMintQuantity,
-            totalSupply,
-            deadline,
-            depositDeadline,
-            whiteList
-        );
-        (uint nativeFee, uint zroFee) = estimateFee(
-            dstChainId,
-            false,
-            adapterParams,
-            encodedPayload
-        );
-        require(msg.value >= nativeFee, "Insufficient fee");
-
-        _lzSend(
-            dstChainId,
-            encodedPayload,
-            payable(tx.origin),
-            address(0x0),
-            adapterParams,
-            nativeFee
-        );
-    }
-
     function getNftContractsOfAccount(
         address owner
     ) public view returns (address) {
         return nftContracts[owner];
     }
+
+    function setName(
+        address _nftContractAddress,
+        string memory _name
+    ) external onlyOwner {
+        ERC1155Contract(_nftContractAddress).setName(_name);
+    }
+
+    function setSymbol(
+        address _nftContractAddress,
+        string memory _symbol
+    ) external onlyOwner {
+        ERC1155Contract(_nftContractAddress).setSymbol(_symbol);
+    }
+
+    function setBaseURI(
+        address _nftContractAddress,
+        string memory _baseURI
+    ) external onlyOwner {
+        ERC1155Contract(_nftContractAddress).setBaseURI(_baseURI);
+    }
+
+    /** UTILS */
+
+    modifier onlyValidator() {
+        require(
+            hasRole(VALIDATOR_ROLE, msg.sender),
+            "Caller is not a validator"
+        );
+        _;
+    }
+
+    function setupValidatorRole(address account) external onlyOwner {
+        _grantRole(VALIDATOR_ROLE, account);
+    }
+
+    function revokeValidatorRole(address account) external onlyOwner {
+        _revokeRole(VALIDATOR_ROLE, account);
+    }
+
+    /** UNUSED FUNCTIONS **/
+
+    // function createDepositContractBySeller(
+    //     uint16 dstChainId,
+    //     address sellerAddress,
+    //     address tokenAddress,
+    //     uint16 depositContractDstChainId,
+    //     uint256 mintPrice,
+    //     uint256 whiteListMintPrice,
+    //     uint256 minMintQuantity,
+    //     uint256 maxMintQuantity,
+    //     uint256 totalSupply,
+    //     uint256 deadline,
+    //     uint256 depositDeadline,
+    //     address[] memory whiteList,
+    //     bytes calldata adapterParams
+    // ) external payable {
+    //     bytes memory encodedPayload = abi.encode(
+    //         2,
+    //         sellerAddress,
+    //         tokenAddress,
+    //         depositContractDstChainId,
+    //         mintPrice,
+    //         whiteListMintPrice,
+    //         minMintQuantity,
+    //         maxMintQuantity,
+    //         totalSupply,
+    //         deadline,
+    //         depositDeadline,
+    //         whiteList
+    //     );
+    //     (uint nativeFee, uint zroFee) = estimateFee(
+    //         dstChainId,
+    //         false,
+    //         adapterParams,
+    //         encodedPayload
+    //     );
+    //     require(msg.value >= nativeFee, "Insufficient fee");
+
+    //     _lzSend(
+    //         dstChainId,
+    //         encodedPayload,
+    //         payable(tx.origin),
+    //         address(0x0),
+    //         adapterParams,
+    //         nativeFee
+    //     );
+    // }
+
+    // function createPayContractBySeller(
+    //     uint256 maxAcceptedValue,
+    //     address[] memory tokenAddresses,
+    //     uint256 deadline,
+    //     uint16 dstChainId,
+    //     bytes calldata adapterParams
+    // ) public payable {
+    //     bytes memory encodedPayload = abi.encode(
+    //         1,
+    //         maxAcceptedValue,
+    //         tokenAddresses,
+    //         msg.sender,
+    //         deadline
+    //     );
+
+    //     (uint nativeFee, uint zroFee) = estimateFee(
+    //         dstChainId,
+    //         false,
+    //         adapterParams,
+    //         encodedPayload
+    //     );
+
+    //     require(msg.value >= nativeFee, "Insufficient fee");
+
+    //     _lzSend(
+    //         dstChainId,
+    //         encodedPayload,
+    //         payable(msg.sender),
+    //         address(0x0),
+    //         adapterParams,
+    //         nativeFee
+    //     );
+    // }
+
+    /** OTHERS **/
 
     function estimateFee(
         uint16 dstChainId_,

@@ -3,6 +3,8 @@ pragma solidity 0.8.17;
 
 // solhint-disable not-rely-on-time
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 interface AggregatorV3Interface {
     function latestRoundData()
@@ -16,6 +18,8 @@ interface AggregatorV3Interface {
             uint80 answeredInRound
         );
 }
+
+// import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 library DataFeedClient {
     int256 internal constant MIN_VALUE = 10 ** 7; // 0.1 USD
@@ -40,12 +44,70 @@ library DataFeedClient {
     }
 }
 
-contract ChainLinkPriceFeed {
+contract ChainLinkPriceFeed is AccessControl {
+    bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
+
     using DataFeedClient for AggregatorV3Interface;
 
-    uint256 internal constant USD_LIMIT = 15000 * 10 ** 8;
+    uint8 internal constant USD_DECIMALS = 8;
 
-    constructor() {}
+    uint256 internal constant USD_LIMIT = 15000 * 10 ** USD_DECIMALS; // 15,000 USD
+
+    mapping(string => address) private _priceFeedAddress;
+
+    address public _nativeTokenPriceFeedAddress;
+
+    constructor(
+        address nativeTokenPriceFeedAddress
+    ) {
+        _setupRole(OWNER_ROLE, msg.sender);
+
+        _nativeTokenPriceFeedAddress = nativeTokenPriceFeedAddress;
+    }
+
+    function transferOwner(address newOwner) public onlyRole(OWNER_ROLE) {
+        _setupRole(OWNER_ROLE, newOwner);
+        _revokeRole(OWNER_ROLE, msg.sender);
+    }
+
+    function setPriceFeedAddress(
+        string memory symbol,
+        address priceFeed
+    ) external onlyRole(OWNER_ROLE) {
+        _priceFeedAddress[symbol] = priceFeed;
+    }
+
+    function getPriceFeedAddress(
+        string memory symbol
+    ) public view returns (address) {
+        return _priceFeedAddress[symbol];
+    }
+
+    function getTokenInfo(
+        address tokenAddress
+    ) public view returns (string memory, uint8) {
+        ERC20 token = ERC20(tokenAddress);
+        string memory symbol = token.symbol();
+        uint8 decimals = token.decimals();
+        return (symbol, decimals);
+    }
+
+    function convertUsdToTokenPrice(
+        uint256 usdValue,
+        address tokenAddress
+    ) public view returns (uint256, uint256) {
+        if (tokenAddress == address(0)) {
+            (, uint256 usdValueToNativeToken) = convertUsdToTokenAmount(usdValue, _nativeTokenPriceFeedAddress);
+            uint256 nativeTokenPrice = usdValueToNativeToken / (10 ** USD_DECIMALS);
+            return (usdValueToNativeToken, nativeTokenPrice);
+        }
+        
+        (string memory tokenSymbol, uint8 tokenDecimals) = getTokenInfo(tokenAddress);
+        address priceFeedAddress = getPriceFeedAddress(tokenSymbol);
+        (, uint256 usdValueToTokenAmount) = convertUsdToTokenAmount(usdValue, priceFeedAddress);
+        uint256 tokenPrice = usdValueToTokenAmount / (10 ** tokenDecimals);
+        return (usdValueToTokenAmount, tokenPrice);
+    }
 
     /**
      * Convert USD value to token amount
@@ -61,6 +123,8 @@ contract ChainLinkPriceFeed {
         AggregatorV3Interface priceFeed = AggregatorV3Interface(
             tokenPriceFeedAddress
         );
+
+        require(usdValue <= USD_LIMIT, "USD value too high");
 
         uint256 tokenPrice = priceFeed.getData();
         uint256 usdValueToTokenAmount = (usdValue * 1 ether) / tokenPrice;
@@ -85,6 +149,8 @@ contract ChainLinkPriceFeed {
 
         uint256 tokenPrice = priceFeed.getData();
         uint256 tokenAmountToUsdValue = (tokenAmount * tokenPrice) / 1 ether;
+
+        require(tokenAmountToUsdValue <= USD_LIMIT, "USD value too high");
 
         return (tokenPrice, tokenAmountToUsdValue);
     }

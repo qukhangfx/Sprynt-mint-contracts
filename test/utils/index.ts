@@ -15,10 +15,7 @@ const DEPOSIT_ITEM_DATA_TYPE = {
     { name: "mintPrice", type: "uint256" },
     { name: "mintQuantity", type: "uint256" },
     { name: "sellerAddress", type: "address" },
-    { name: "dstChainId", type: "uint16" },
-    { name: "isMintAvailable", type: "bool" },
     { name: "nonce", type: "uint256" },
-    { name: "deadline", type: "uint256" },
   ],
 };
 
@@ -26,9 +23,6 @@ export type DepositItemData = {
   mintPrice: BigNumberish;
   mintQuantity: BigNumberish;
   sellerAddress: BigNumberish;
-  dstChainId: BigNumberish;
-  isMintAvailable: Boolean;
-  deadline: BigNumberish;
 };
 
 export async function signDepositItemData(
