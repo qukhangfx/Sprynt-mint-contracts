@@ -169,7 +169,7 @@ contract DepositContract is ReentrancyGuard {
 
         require(supportedTokenAddress[token] == true, "Not supported token!");
 
-        (, uint256 newPrice) = ChainLinkPriceFeed(_chainlinkPriceFeedAddress).convertUsdToTokenPrice(depositItem.mintPrice, token);
+        uint256 newPrice = ChainLinkPriceFeed(_chainlinkPriceFeedAddress).convertUsdToTokenPrice(depositItem.mintPrice, token);
         uint256 value = newPrice * depositItem.mintQuantity;
 
         if (token == address(0)) {

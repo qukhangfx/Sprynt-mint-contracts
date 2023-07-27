@@ -8,6 +8,8 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+import "hardhat/console.sol";
+
 contract RPaymentContract is AccessControl {
     bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
     bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
@@ -149,6 +151,13 @@ contract RPaymentContract is AccessControl {
         _factoryContractAddress = factoryContractAddress_;
     }
 
+    function getPrice(
+        uint256 usdValue,
+        address token
+    ) public view returns (uint256) {
+        return ChainLinkPriceFeed(_chainlinkPriceFeedAddress).convertUsdToTokenPrice(usdValue, token);
+    }
+
     /** PAY LINK **/
 
     function pay(
@@ -159,13 +168,14 @@ contract RPaymentContract is AccessControl {
     ) public payable {
         require(!vpIds[vpId], "Already paid!");
 
-        DepositFactoryContract depositFactoryContract = DepositFactoryContract(
+        require(supportedTokenAddress[token], "Not supported token!");
+
+         DepositFactoryContract depositFactoryContract = DepositFactoryContract(
             _factoryContractAddress
         );
 
-        (, uint256 newPrice) = ChainLinkPriceFeed(_chainlinkPriceFeedAddress).convertUsdToTokenPrice(usdValue, token);
-        uint256 value = newPrice;
-        
+        uint256 value = getPrice(usdValue, token);
+
         uint256 platformFeePayAmount = depositFactoryContract.calcPayFeeAmount(
             value
         );
@@ -294,8 +304,7 @@ contract RPaymentContract is AccessControl {
 
         require(supportedTokenAddress[token], "Not supported token!");
 
-        (, uint256 newPrice) = ChainLinkPriceFeed(_chainlinkPriceFeedAddress).convertUsdToTokenPrice(setupPaymentStruct.usdValue, token);
-        uint256 value = newPrice;
+        uint256 value = ChainLinkPriceFeed(_chainlinkPriceFeedAddress).convertUsdToTokenPrice(setupPaymentStruct.usdValue, token);
 
         uint256 platformFeePayAmount = depositFactoryContract.calcPayFeeAmount(
             value

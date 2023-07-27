@@ -51,8 +51,6 @@ contract ChainLinkPriceFeed is AccessControl {
 
     uint8 internal constant USD_DECIMALS = 8;
 
-    uint256 internal constant USD_LIMIT = 15000 * 10 ** USD_DECIMALS; // 15,000 USD
-
     mapping(string => address) private _priceFeedAddress;
 
     address public _nativeTokenPriceFeedAddress;
@@ -95,63 +93,38 @@ contract ChainLinkPriceFeed is AccessControl {
     function convertUsdToTokenPrice(
         uint256 usdValue,
         address tokenAddress
-    ) public view returns (uint256, uint256) {
+    ) public view returns (uint256) {
         if (tokenAddress == address(0)) {
-            (, uint256 usdValueToNativeToken) = convertUsdToTokenAmount(usdValue, _nativeTokenPriceFeedAddress);
-            uint256 nativeTokenPrice = usdValueToNativeToken / (10 ** USD_DECIMALS);
-            return (usdValueToNativeToken, nativeTokenPrice);
+            (, uint256 usdValueToNativeToken) = convertUsdToTokenAmount(usdValue, _nativeTokenPriceFeedAddress, 18);
+            return usdValueToNativeToken;
         }
         
         (string memory tokenSymbol, uint8 tokenDecimals) = getTokenInfo(tokenAddress);
         address priceFeedAddress = getPriceFeedAddress(tokenSymbol);
-        (, uint256 usdValueToTokenAmount) = convertUsdToTokenAmount(usdValue, priceFeedAddress);
-        uint256 tokenPrice = usdValueToTokenAmount / (10 ** tokenDecimals);
-        return (usdValueToTokenAmount, tokenPrice);
+        (, uint256 usdValueToTokenAmount) = convertUsdToTokenAmount(usdValue, priceFeedAddress, tokenDecimals);
+        return usdValueToTokenAmount;
     }
 
     /**
      * Convert USD value to token amount
      * @param usdValue USD value
      * @param tokenPriceFeedAddress Chainlink price feed address
+     * @param tokenDecimals Token decimals
      * @return tokenPrice Token price in USD
      * @return usdValueToTokenAmount USD value to token amount
      */
     function convertUsdToTokenAmount(
         uint256 usdValue,
-        address tokenPriceFeedAddress
+        address tokenPriceFeedAddress,
+        uint8 tokenDecimals
     ) public view returns (uint256, uint256) {
         AggregatorV3Interface priceFeed = AggregatorV3Interface(
             tokenPriceFeedAddress
         );
 
-        require(usdValue <= USD_LIMIT, "USD value too high");
-
         uint256 tokenPrice = priceFeed.getData();
-        uint256 usdValueToTokenAmount = (usdValue * 1 ether) / tokenPrice;
+        uint256 usdValueToTokenAmount = (usdValue * 10 ** tokenDecimals) / tokenPrice;
 
         return (tokenPrice, usdValueToTokenAmount);
-    }
-
-    /**
-     * Convert token amount to USD value
-     * @param tokenAmount Token amount
-     * @param tokenPriceFeedAddress  Chainlink price feed address
-     * @return tokenPrice Token price in USD
-     * @return tokenAmountToUsdValue Token amount to USD value
-     */
-    function convertTokenAmountToUsd(
-        uint256 tokenAmount,
-        address tokenPriceFeedAddress
-    ) public view returns (uint256, uint256) {
-        AggregatorV3Interface priceFeed = AggregatorV3Interface(
-            tokenPriceFeedAddress
-        );
-
-        uint256 tokenPrice = priceFeed.getData();
-        uint256 tokenAmountToUsdValue = (tokenAmount * tokenPrice) / 1 ether;
-
-        require(tokenAmountToUsdValue <= USD_LIMIT, "USD value too high");
-
-        return (tokenPrice, tokenAmountToUsdValue);
     }
 }

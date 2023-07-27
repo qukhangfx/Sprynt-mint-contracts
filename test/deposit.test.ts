@@ -102,6 +102,8 @@ describe("Test multichain minting engine", () => {
     )) as ChainLinkPriceFeed;
     await chainlinkPriceFeed.deployed();
 
+    console.log("ChainLinkPriceFeed deployed to:", chainlinkPriceFeed.address);
+
     const TestTokenFactory = await ethers.getContractFactory("TestToken");
     testTokenContract = (await TestTokenFactory.deploy(
       erc20TokenName,
@@ -236,7 +238,7 @@ describe("Test multichain minting engine", () => {
         testTokenContract.address,
       ],
       depositFactoryContract.address,
-      staticDataFeed.address
+      chainlinkPriceFeed.address,
     ) as RPaymentContract;
     await rPaymentContract.deployed();
 
@@ -264,14 +266,102 @@ describe("Test multichain minting engine", () => {
 
     it("[PriceFeed] convertUsdToTokenPrice", async () => {
       const usdValue = 1 * 10 ** USD_DECIMALS; // 1 USD
-      const [usdValueToNativeToken, _] = await chainlinkPriceFeed.convertUsdToTokenPrice(usdValue, ethers.constants.AddressZero);
+      const usdValueToNativeToken = await chainlinkPriceFeed.convertUsdToTokenPrice(usdValue, ethers.constants.AddressZero);
       const nativeToken = Number(usdValueToNativeToken) / 10 ** 18; // 18 is the decimals of native token
       expect(isFloatEqual(nativeToken, 0.00053)).to.be.true; // ETH
       // expect(isFloatEqual(nativeToken, 0.07452)).to.be.true; // AVAX
     });
 
-    it("[Mint]", async () => {
+    it("[Paylink] pay: revert with 'Not supported token!'", async () => {
+      const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("test"));
 
+      const usdValue = 1 * 10 ** USD_DECIMALS; // 1 USD
+
+      await expect(
+        rPaymentContract.connect(clientWallet).pay(
+          "0x0000000000000000000000000000000000000001",
+          sellerWalletAddress,
+          usdValue,
+          vpId
+        )
+      ).to.be.revertedWith("Not supported token!"); 
+    });
+
+    it("[Paylink] pay: revert with 'Insufficient native token balances'", async () => {
+      const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("test"));
+
+      const usdValue = 1 * 10 ** USD_DECIMALS; // 1 USD
+
+      await expect(
+        rPaymentContract.connect(clientWallet).pay(
+          ethers.constants.AddressZero,
+          sellerWalletAddress,
+          usdValue,
+          vpId
+        )
+      ).to.be.revertedWith("Insufficient native token balances");
+    });
+
+    it("[Paylink] pay: revert with 'Insufficient native token balances'", async () => {
+      const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("test"));
+
+      const usdValue = 1 * 10 ** USD_DECIMALS; // 1 USD
+
+      const price: BigNumber = await rPaymentContract.getPrice(usdValue, ethers.constants.AddressZero);
+
+      await expect(
+        rPaymentContract.connect(clientWallet).pay(
+          ethers.constants.AddressZero,
+          sellerWalletAddress,
+          usdValue,
+          vpId, {
+            value: price.sub(1),
+          }
+        )
+      ).to.be.revertedWith("Insufficient native token balances");
+    });
+
+    it("[Paylink] pay: fulfilled", async () => {
+      const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("test"));
+
+      const usdValue = 1 * 10 ** USD_DECIMALS; // 1 USD
+
+      const price: BigNumber = await rPaymentContract.getPrice(usdValue, ethers.constants.AddressZero);
+
+      await expect(
+        rPaymentContract.connect(clientWallet).pay(
+          ethers.constants.AddressZero,
+          sellerWalletAddress,
+          usdValue,
+          vpId, {
+            value: price,
+          }
+        )
+      ).to.be.fulfilled;
+
+      const [tokenAddress_, sellerAddress_, value_, blockNumber_] = await rPaymentContract.vpInfo(vpId);
+      expect(tokenAddress_).to.be.equal(ethers.constants.AddressZero);
+      expect(sellerAddress_).to.be.equal(sellerWalletAddress);
+      expect(value_).to.be.equal(price);
+    });
+
+    it("[Paylink] pay: revert with 'Already paid!'", async () => {
+      const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("test"));
+
+      const usdValue = 1 * 10 ** USD_DECIMALS; // 1 USD
+
+      const price: BigNumber = await rPaymentContract.getPrice(usdValue, ethers.constants.AddressZero);
+
+      await expect(
+        rPaymentContract.connect(clientWallet).pay(
+          ethers.constants.AddressZero,
+          sellerWalletAddress,
+          usdValue,
+          vpId, {
+            value: price,
+          }
+        )
+      ).to.be.rejectedWith("Already paid!");
     });
   });
 });

@@ -124,8 +124,7 @@ contract SimplePay is AccessControl, ReentrancyGuard {
         require(supportedTokenAddress[token], "This token is not supported");
         require(!vpIDs[vpID], "vpID is already used");
 
-        (, uint256 newPrice) = ChainLinkPriceFeed(_chainlinkPriceFeedAddress).convertUsdToTokenPrice(usdValue, token);
-        uint256 value = newPrice;
+        uint256 value = ChainLinkPriceFeed(_chainlinkPriceFeedAddress).convertUsdToTokenPrice(usdValue, token);
 
         if (token == address(0)) {
             require(msg.value >= value, "Insufficient native token balances");
@@ -200,8 +199,7 @@ contract SimplePay is AccessControl, ReentrancyGuard {
         address token,
         uint256 usdValue
     ) external onlyRole(OWNER_ROLE) {
-        (, uint256 newPrice) = ChainLinkPriceFeed(_chainlinkPriceFeedAddress).convertUsdToTokenPrice(usdValue, token);
-        uint256 value = newPrice;
+        uint256 value = ChainLinkPriceFeed(_chainlinkPriceFeedAddress).convertUsdToTokenPrice(usdValue, token);
 
         require(value <= allowances[token], "Insufficient fund");
 
