@@ -78,6 +78,7 @@ contract ChainLinkPriceFeed is AccessControl {
     function getPriceFeedAddress(
         string memory symbol
     ) public view returns (address) {
+        require(_priceFeedAddress[symbol] != address(0), "PriceFeed: invalid symbol");
         return _priceFeedAddress[symbol];
     }
 
@@ -95,13 +96,13 @@ contract ChainLinkPriceFeed is AccessControl {
         address tokenAddress
     ) public view returns (uint256) {
         if (tokenAddress == address(0)) {
-            (, uint256 usdValueToNativeToken) = convertUsdToTokenAmount(usdValue, _nativeTokenPriceFeedAddress, 18);
+            (, uint256 usdValueToNativeToken) = _convertUsdToTokenPrice(usdValue, _nativeTokenPriceFeedAddress, 18);
             return usdValueToNativeToken;
         }
         
         (string memory tokenSymbol, uint8 tokenDecimals) = getTokenInfo(tokenAddress);
         address priceFeedAddress = getPriceFeedAddress(tokenSymbol);
-        (, uint256 usdValueToTokenAmount) = convertUsdToTokenAmount(usdValue, priceFeedAddress, tokenDecimals);
+        (, uint256 usdValueToTokenAmount) = _convertUsdToTokenPrice(usdValue, priceFeedAddress, tokenDecimals);
         return usdValueToTokenAmount;
     }
 
@@ -113,7 +114,7 @@ contract ChainLinkPriceFeed is AccessControl {
      * @return tokenPrice Token price in USD
      * @return usdValueToTokenAmount USD value to token amount
      */
-    function convertUsdToTokenAmount(
+    function _convertUsdToTokenPrice(
         uint256 usdValue,
         address tokenPriceFeedAddress,
         uint8 tokenDecimals

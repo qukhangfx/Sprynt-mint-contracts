@@ -304,7 +304,7 @@ contract RPaymentContract is AccessControl {
 
         require(supportedTokenAddress[token], "Not supported token!");
 
-        uint256 value = ChainLinkPriceFeed(_chainlinkPriceFeedAddress).convertUsdToTokenPrice(setupPaymentStruct.usdValue, token);
+        uint256 value = getPrice(setupPaymentStruct.usdValue, token);
 
         uint256 platformFeePayAmount = depositFactoryContract.calcPayFeeAmount(
             value

@@ -15,6 +15,10 @@ contract TestToken is ERC20 {
     ) ERC20(_name, _symbol) {
         _decimals = _ddecimals;
     }
+
+    function symbol() public view virtual override returns (string memory) {
+        return super.symbol();
+    }
     
     function decimals() public view virtual override returns (uint8) {
         return _decimals;

@@ -37,19 +37,28 @@ console.log("ETH to USD:", STATIC_PRICE_.ETH_USD / 10 ** 8);
 console.log("AVAX to USD:", STATIC_PRICE_.AVAX_USD / 10 ** 8);
 console.log("USDC to USD:", STATIC_PRICE_.USDC_USD / 10 ** 8);
 
-const STATIC_PRICE = STATIC_PRICE_.ETH_USD;
+const STATIC_NATIVE_PRICE = STATIC_PRICE_.ETH_USD;
+const STATIC_TOKEN_PRICE = STATIC_PRICE_.USDC_USD;
 
 describe("Test multichain minting engine", () => {
   let testTokenContract: TestToken;
+
   let depositContract: DepositContract;
+
   let depositFactoryContract: DepositFactoryContract;
   let receiveFactoryContract: ReceiveFactoryContract;
+
   let depositFactoryContractB: DepositFactoryContract;
   let receiveFactoryContractB: ReceiveFactoryContract;
+
   let NftContract: ERC1155;
   let NftContractB: ERC1155;
+
   let rPaymentContract: RPaymentContract;
-  let staticDataFeed: StaticDataFeed;
+
+  let staticNativeTokenFeed: StaticDataFeed;
+  let staticCustomTokenFeed: StaticDataFeed;
+
   let chainlinkPriceFeed: ChainLinkPriceFeed;
 
   let owner: SignerWithAddress;
@@ -64,17 +73,15 @@ describe("Test multichain minting engine", () => {
   let clientWalletAddress: string;
   let validatorRoleAccountAddress: string;
 
-  let mintNftName = "Banh tet La Cam";
-  let mintNftSymbol = "bTET";
+  let ftName = "Banh tet La Cam";
+  let nftSymbol = "bTET";
 
-  const nftName = "Polarys test NFTs";
-  const nftSymbol = "PNT";
   const tokenURI =
     "https://bafybeidyj2ases25wrcwyisxsbnfo6qe7oe4re5ql77uspoo6d33benknq.ipfs.nftstorage.link/";
   const totalSupply = 100;
 
-  const erc20TokenName = "TestToken";
-  const erc20TokenSymbol = "TT";
+  const erc20TokenName = "USDC";
+  const erc20TokenSymbol = "USDC";
   const depositTokenDecimals = 6;
 
   const chainIdSrc = 1;
@@ -90,19 +97,25 @@ describe("Test multichain minting engine", () => {
     clientWalletAddress = await clientWallet.getAddress();
     validatorRoleAccountAddress = await validatorRoleAccount.getAddress();
 
-    const StaticDataFeedFactory = await ethers.getContractFactory("StaticDataFeed");
-    staticDataFeed = (await StaticDataFeedFactory.deploy(STATIC_PRICE, -1)) as StaticDataFeed;
-    await staticDataFeed.deployed();
+    const StaticNativeTokenFeedFactory = await ethers.getContractFactory("StaticDataFeed");
+    staticNativeTokenFeed = (await StaticNativeTokenFeedFactory.deploy(STATIC_NATIVE_PRICE, -1)) as StaticDataFeed;
+    await staticNativeTokenFeed.deployed();
 
-    console.log("StaticDataFeed deployed to:", staticDataFeed.address);
+    console.log("StaticNativeTokenFeedFactory deployed to:", staticNativeTokenFeed.address);
 
-    const ChainLinkPriceFeedFactory = await ethers.getContractFactory("ChainLinkPriceFeed");
-    chainlinkPriceFeed = (await ChainLinkPriceFeedFactory.deploy(
-      staticDataFeed.address
+    const StaticCustomTokenFeedFactory = await ethers.getContractFactory("StaticDataFeed");
+    staticCustomTokenFeed = (await StaticCustomTokenFeedFactory.deploy(STATIC_TOKEN_PRICE, -1)) as StaticDataFeed;
+    await staticCustomTokenFeed.deployed();
+
+    console.log("StaticCustomTokenFeedFactory deployed to:", staticCustomTokenFeed.address);
+
+    const ChainlinkPriceFeed = await ethers.getContractFactory("ChainLinkPriceFeed");
+    chainlinkPriceFeed = (await ChainlinkPriceFeed.deploy(
+      staticNativeTokenFeed.address
     )) as ChainLinkPriceFeed;
     await chainlinkPriceFeed.deployed();
 
-    console.log("ChainLinkPriceFeed deployed to:", chainlinkPriceFeed.address);
+    console.log("ChainlinkPriceFeed deployed to:", chainlinkPriceFeed.address);
 
     const TestTokenFactory = await ethers.getContractFactory("TestToken");
     testTokenContract = (await TestTokenFactory.deploy(
@@ -260,8 +273,8 @@ describe("Test multichain minting engine", () => {
 
     it("[StaticDataFeed] latestRoundData", async () => {
       let price: BigNumber;
-      [, price, , ,] = await staticDataFeed.latestRoundData();
-      expect(price).to.be.equal(STATIC_PRICE);
+      [, price, , ,] = await staticNativeTokenFeed.latestRoundData();
+      expect(price).to.be.equal(STATIC_NATIVE_PRICE);
     });
 
     it("[PriceFeed] convertUsdToTokenPrice", async () => {
@@ -362,6 +375,169 @@ describe("Test multichain minting engine", () => {
           }
         )
       ).to.be.rejectedWith("Already paid!");
+    });
+
+    it("[Recurring Payment] setupByValidator: fulfilled", async () => {
+      const subscriptionId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("subscription_id"));
+      const usdValue = 1 * 10 ** USD_DECIMALS; // 1 USD
+      const duration = 5; // 5 seconds
+
+      await expect(
+        rPaymentContract.connect(validatorRoleAccount).setupByValidator(
+          sellerWalletAddress,
+          subscriptionId,
+          usdValue,
+          duration
+        )
+      ).to.be.fulfilled;
+
+      const [usdValue_, duration_] = await rPaymentContract.setupPayment(sellerWalletAddress, subscriptionId);
+      expect(usdValue_).to.be.equal(usdValue);
+      expect(duration_).to.be.equal(duration);
+
+      const sellerAddress_ = await rPaymentContract.ownerOfSubscription(subscriptionId);
+      expect(sellerAddress_).to.be.equal(sellerWalletAddress);
+    });
+
+    it("[Recurring Payment] subscribe / native token: revert with 'Not supported native token!'", async () => {
+      const subscriptionId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("subscription_id"));
+      const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("vp_id"));
+      
+      const usdValue = 1 * 10 ** USD_DECIMALS; // 1 USD
+      const price = await rPaymentContract.getPrice(usdValue, ethers.constants.AddressZero);
+
+      await expect(
+        rPaymentContract.connect(clientWallet).subscribe(
+          sellerWalletAddress,
+          subscriptionId,
+          vpId,
+          ethers.constants.AddressZero,
+          {
+            value: price,
+          }
+        )
+      ).to.be.revertedWith("Not supported native token!");
+    });
+
+    it("[Recurring Payment] subscribe / custom token: fulfilled", async () => {
+      const subscriptionId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("subscription_id"));
+      const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("vp_id"));
+      
+      const usdValue = 1 * 10 ** USD_DECIMALS; // 1 USD
+
+      const [tokenSymbol, tokenDecimals] = await chainlinkPriceFeed.getTokenInfo(testTokenContract.address);
+      expect(tokenSymbol).to.be.equal("USDC");
+      expect(tokenDecimals).to.be.equal(6);
+
+      await expect(
+        rPaymentContract.getPrice(usdValue, testTokenContract.address)
+      ).to.be.rejectedWith("PriceFeed: invalid symbol");
+
+      await expect(
+        chainlinkPriceFeed.setPriceFeedAddress(tokenSymbol, staticCustomTokenFeed.address)
+      ).to.be.fulfilled;
+
+      expect(
+        await chainlinkPriceFeed.getPriceFeedAddress(tokenSymbol)
+      ).to.be.equal(staticCustomTokenFeed.address)
+
+      const price = await rPaymentContract.getPrice(usdValue, testTokenContract.address);
+      expect(price.div(10 ** tokenDecimals)).to.be.equal(usdValue / 10 ** USD_DECIMALS);
+
+      await expect(
+        rPaymentContract.connect(clientWallet).subscribe(
+          sellerWalletAddress,
+          subscriptionId,
+          vpId,
+          testTokenContract.address, {
+            value: 0,
+          }
+        )
+      ).to.be.rejectedWith("ERC20: insufficient allowance");
+
+      await testTokenContract.connect(clientWallet).approve(rPaymentContract.address, price);
+
+      await expect(
+        rPaymentContract.connect(clientWallet).subscribe(
+          sellerWalletAddress,
+          subscriptionId,
+          vpId,
+          testTokenContract.address,
+          {
+            value: 0,
+          }
+        )
+      ).to.be.fulfilled;
+
+      const lastestPayment = await rPaymentContract.lastestPayment(clientWalletAddress, vpId);
+      expect(lastestPayment.seller).to.be.equal(sellerWalletAddress);
+      expect(lastestPayment.buyer).to.be.equal(clientWalletAddress);
+      expect(lastestPayment.subscriptionId).to.be.equal(subscriptionId);
+      expect(lastestPayment.token).to.be.equal(testTokenContract.address);
+      expect(lastestPayment.value).to.be.equal(price);
+      expect(lastestPayment.renew).to.be.true;
+      
+
+      await expect(
+        rPaymentContract.connect(clientWallet).subscribe(
+          sellerWalletAddress,
+          subscriptionId,
+          vpId,
+          testTokenContract.address, {
+            value: 0,
+          }
+        )
+      ).to.be.rejectedWith("Already subscribe!");
+
+      const newVpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("new_vp_id"));
+
+      await expect(
+        rPaymentContract.connect(clientWallet).subscribe(
+          sellerWalletAddress,
+          subscriptionId,
+          newVpId,
+          testTokenContract.address, {
+            value: 0,
+          }
+        )
+      ).to.be.rejectedWith("ERC20: insufficient allowance");
+    });
+
+    it("[Recurring Payment] renew / custom token: fulfilled", async () => {
+      const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("vp_id"));
+
+      await expect(
+        rPaymentContract.connect(sellerWallet).renew(
+          clientWalletAddress,
+          vpId,
+        )
+      ).to.be.rejectedWith("Not yet time!");
+
+      await delay(5_000);
+
+      await expect(
+        rPaymentContract.connect(sellerWallet).renew(
+          clientWalletAddress,
+          vpId,
+        )
+      ).to.be.rejectedWith("ERC20: insufficient allowance");
+
+      await testTokenContract.connect(clientWallet).approve(rPaymentContract.address, 1_000_000);
+
+      await expect(
+        rPaymentContract.connect(sellerWallet).renew(
+          clientWalletAddress,
+          vpId,
+        )
+      ).to.be.fulfilled;
+    });
+
+    it("[Recurring Payment] disable: fulfilled", async () => {
+      const subscriptionId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("subscription_id"));
+
+      await expect(
+        rPaymentContract.connect(sellerWallet).disable(subscriptionId)
+      ).to.be.fulfilled;
     });
   });
 });
