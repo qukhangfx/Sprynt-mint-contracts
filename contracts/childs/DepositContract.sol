@@ -133,6 +133,13 @@ contract DepositContract is ReentrancyGuard {
         emit Received(msg.sender, msg.value);
     }
 
+    function getPrice(
+        uint256 usdValue,
+        address token
+    ) public view returns (uint256) {
+        return ChainLinkPriceFeed(_chainlinkPriceFeedAddress).convertUsdToTokenPrice(usdValue, token);
+    }
+
     function mint(
         DepositItem calldata depositItem,
         address token
@@ -158,7 +165,7 @@ contract DepositContract is ReentrancyGuard {
             require(whiteList[msg.sender], "You are not in white list!");
             require(
                 depositItem.mintPrice == whiteListMintPrice,
-                "Invalid mint price!"
+                "Invalid white list mint price!"
             );
         } else {
             require(depositItem.mintPrice == mintPrice, "Invalid mint price!");
@@ -331,7 +338,7 @@ contract DepositContract is ReentrancyGuard {
         return _baseURI;
     }
 
-    function tokenUri(uint256 tokenId) external view returns (string memory) {
+    function tokenURI(uint256 tokenId) external view returns (string memory) {
         if (bytes(_tokenURIs[tokenId]).length == 0) {
             return
                 string(abi.encodePacked(_baseURI, Strings.toString(tokenId)));

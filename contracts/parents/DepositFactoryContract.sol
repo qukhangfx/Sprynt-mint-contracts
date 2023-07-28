@@ -71,6 +71,7 @@ contract DepositFactoryContract is
 
         _setupRole(OWNER_ROLE, owner);
         _setupRole(VALIDATOR_ROLE, depositRoleAccount);
+        _setupRole(DEFAULT_ADMIN_ROLE, adminWallet);
     }
 
     function setupValidatorRole(address account) external onlyOwner {
@@ -93,6 +94,8 @@ contract DepositFactoryContract is
     }
 
     modifier onlyPermissioned() {
+        _requireNotPaused();
+
         require(
             hasRole(OWNER_ROLE, msg.sender) ||
                 hasRole(VALIDATOR_ROLE, msg.sender),
@@ -541,13 +544,19 @@ contract DepositFactoryContract is
         }
     }
 
-    /** What is DEFAULT_ADMIN_ROLE? **/
+    modifier onlyAdmin() {
+        require(
+            hasRole(DEFAULT_ADMIN_ROLE, msg.sender),
+            "Caller is not the admin"
+        );
+        _;
+    }
 
-    function pause() public virtual onlyRole(DEFAULT_ADMIN_ROLE) {
+    function pause() public virtual onlyAdmin {
         _pause();
     }
 
-    function unpause() public virtual onlyRole(DEFAULT_ADMIN_ROLE) {
+    function unpause() public virtual onlyAdmin {
         _unpause();
     }
 
