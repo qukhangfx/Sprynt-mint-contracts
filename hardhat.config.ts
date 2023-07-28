@@ -206,10 +206,10 @@ const config = {
       {
         version: "0.8.17",
         settings: {
-          optimizer: {
-            enabled: true,
-            runs: 100,
-          },
+          // optimizer: {
+          //   enabled: false,
+          //   runs: 100,
+          // },
           // viaIR: true,
         },
       },

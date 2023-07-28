@@ -3,7 +3,9 @@ module.exports = {
         'childs/PolarysNftContract.sol',
         'interfaces/IPolarysNftContract.sol',
         'library/CloneFactory',
-        'library/Domain.sol'
+        'library/Domain.sol',
+        'mocks/TestToken.sol',
+        'mocks/TestPriceFeed.sol',
     ],
     configureYulOptimizer: true,
     solcOptimizerDetails: {
@@ -16,4 +18,5 @@ module.exports = {
         constantOptimizer: true,
         yul: true,
     },
+    istanbulReporter: ['html'],
 };

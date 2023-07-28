@@ -173,8 +173,7 @@ contract DepositContract is ReentrancyGuard {
 
         require(supportedTokenAddress[token] == true, "Not supported token!");
 
-        uint256 newPrice = ChainLinkPriceFeed(_chainlinkPriceFeedAddress)
-            .convertUsdToTokenPrice(depositItem.mintPrice, token);
+        uint256 newPrice = getPrice(depositItem.mintPrice, token);
         uint256 value = newPrice * depositItem.mintQuantity;
 
         if (token == address(0)) {
@@ -375,58 +374,46 @@ contract DepositContract is ReentrancyGuard {
         emit Transferred(from, to, tokenId);
     }
 
-    function burn(address owner, uint256 tokenId) external onlyFactoryContract {
-        require(
-            _owners[tokenId] == owner,
-            "This account does not have the required tokenId"
-        );
-        _owners[tokenId] = address(0);
-
-        for (uint256 i = 0; i < _tokensOfAccounts[owner].length; i++) {
-            if (_tokensOfAccounts[owner][i] == tokenId) {
-                delete _tokensOfAccounts[owner][i];
-            }
-        }
-    }
-
     /** WITHDRAW */
 
-    function withdraw(
-        address token,
-        uint256 value
-    ) external onlyFactoryContract {
-        DepositFactoryContract depositFactoryContract = DepositFactoryContract(
-            _factoryContractAddress
-        );
-        if (token == address(0)) {
-            Address.sendValue(
-                payable(depositFactoryContract.getAdminWallet()),
-                value
-            );
-        } else {
-            IERC20(token).transfer(
-                depositFactoryContract.getAdminWallet(),
-                value
-            );
-        }
-    }
+    // function withdraw(
+    //     address token,
+    //     uint256 usdValue
+    // ) external onlyFactoryContract {
+    //     uint256 value  = getPrice(usdValue, token);
 
-    function withdrawAll(address token) external onlyFactoryContract {
-        DepositFactoryContract depositFactoryContract = DepositFactoryContract(
-            _factoryContractAddress
-        );
-        if (token == address(0)) {
-            Address.sendValue(
-                payable(depositFactoryContract.getAdminWallet()),
-                address(this).balance
-            );
-        } else {
-            IERC20(token).transfer(
-                depositFactoryContract.getAdminWallet(),
-                IERC20(token).balanceOf(address(this))
-            );
-        }
-    }
+    //     DepositFactoryContract depositFactoryContract = DepositFactoryContract(
+    //         _factoryContractAddress
+    //     );
+    //     if (token == address(0)) {
+    //         Address.sendValue(
+    //             payable(depositFactoryContract.getAdminWallet()),
+    //             value
+    //         );
+    //     } else {
+    //         IERC20(token).transfer(
+    //             depositFactoryContract.getAdminWallet(),
+    //             value
+    //         );
+    //     }
+    // }
+
+    // function withdrawAll(address token) external onlyFactoryContract {
+    //     DepositFactoryContract depositFactoryContract = DepositFactoryContract(
+    //         _factoryContractAddress
+    //     );
+    //     if (token == address(0)) {
+    //         Address.sendValue(
+    //             payable(depositFactoryContract.getAdminWallet()),
+    //             address(this).balance
+    //         );
+    //     } else {
+    //         IERC20(token).transfer(
+    //             depositFactoryContract.getAdminWallet(),
+    //             IERC20(token).balanceOf(address(this))
+    //         );
+    //     }
+    // }
 
     /** UTILS */
 

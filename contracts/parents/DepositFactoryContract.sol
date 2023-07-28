@@ -12,6 +12,7 @@ import {CloneFactory} from "../library/CloneFactory.sol";
 import {DepositItem} from "../library/Structs.sol";
 import {DepositContract} from "../childs/DepositContract.sol";
 import {SimplePay} from "../childs/SimplePay.sol";
+import {ChainLinkPriceFeed} from "../childs/PriceFeed.sol";
 
 import "hardhat/console.sol";
 
@@ -62,16 +63,28 @@ contract DepositFactoryContract is
 
     event SimplePayContractCreated(address simplePayContractAddress);
 
+    address public _chainlinkPriceFeedAddress;
+
     constructor(
         address owner,
         address adminWallet_,
-        address depositRoleAccount
+        address depositRoleAccount,
+        address chainlinkPriceFeedAddress_
     ) {
         adminWallet = adminWallet_;
 
         _setupRole(OWNER_ROLE, owner);
         _setupRole(VALIDATOR_ROLE, depositRoleAccount);
         _setupRole(DEFAULT_ADMIN_ROLE, adminWallet);
+
+        _chainlinkPriceFeedAddress = chainlinkPriceFeedAddress_;
+    }
+
+    function _setChainlinkPriceFeedAddress(address chainlinkPriceFeedAddress_)
+        external
+        onlyOwner
+    {
+        _chainlinkPriceFeedAddress = chainlinkPriceFeedAddress_;
     }
 
     function setupValidatorRole(address account) external onlyOwner {
@@ -483,13 +496,13 @@ contract DepositFactoryContract is
         );
     }
 
-    function burnToken(
-        address seller,
-        address owner,
-        uint256 tokenId
-    ) external onlyPermissioned isValidDepositContract(seller) {
-        DepositContract(payable(depositContracts[seller])).burn(owner, tokenId);
-    }
+    // function burnToken(
+    //     address seller,
+    //     address owner,
+    //     uint256 tokenId
+    // ) external onlyPermissioned isValidDepositContract(seller) {
+    //     DepositContract(payable(depositContracts[seller])).burn(owner, tokenId);
+    // }
 
     function transferToken(
         address seller,
@@ -525,7 +538,9 @@ contract DepositFactoryContract is
         return adminWallet;
     }
 
-    function withdraw(address token, uint256 value) external onlyOwner {
+    function withdraw(address token, uint256 usdValue) external onlyOwner {
+        uint256 value = getPrice(usdValue, token);
+
         if (token == address(0)) {
             Address.sendValue(payable(adminWallet), value);
         } else {
@@ -575,5 +590,12 @@ contract DepositFactoryContract is
         unchecked {
             return (amount * fee) / 10000;
         }
+    }
+
+    function getPrice(
+        uint256 usdValue,
+        address token
+    ) public view returns (uint256) {
+        return ChainLinkPriceFeed(_chainlinkPriceFeedAddress).convertUsdToTokenPrice(usdValue, token);
     }
 }
