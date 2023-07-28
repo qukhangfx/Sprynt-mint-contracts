@@ -11,13 +11,13 @@ import {DepositFactoryContract} from "../parents/DepositFactoryContract.sol";
 import {ChainLinkPriceFeed} from "./PriceFeed.sol";
 
 contract SimplePay is AccessControl, ReentrancyGuard {
-    bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
+    bytes32 public constant SELLER_ROLE = keccak256("SELLER_ROLE");
 
     uint256 public maxAcceptedUsdValue;
     address[] public supportedTokenList;
     address public seller;
     uint256 public deadline;
-    
+
     address private _factoryContractAddress;
     address private _chainlinkPriceFeedAddress;
 
@@ -38,7 +38,11 @@ contract SimplePay is AccessControl, ReentrancyGuard {
     mapping(uint256 => bool) public isReceived;
     mapping(bytes32 => uint256) public vpOfDepositItems;
 
-    event WithdrawFund(address indexed token, address indexed from, uint256 value);
+    event WithdrawFund(
+        address indexed token,
+        address indexed from,
+        uint256 value
+    );
     event Received(address sender, uint256 value);
 
     bool public initialized;
@@ -53,20 +57,20 @@ contract SimplePay is AccessControl, ReentrancyGuard {
     function init(
         uint256 maxAcceptedUsdValue_,
         address[] memory supportedTokenAddresses,
-        address owner,
+        address seller_,
         uint256 deadline_,
         address chainlinkPriceFeedAddress
     ) external {
-        require(!initialized, "Contract is already initialized");
-        
-        _grantRole(OWNER_ROLE, owner);
-        
+        require(!initialized, "SimplePay: contract is already initialized");
+
+        _grantRole(SELLER_ROLE, seller_);
+
         _factoryContractAddress = msg.sender;
         _chainlinkPriceFeedAddress = chainlinkPriceFeedAddress;
 
-        seller = owner;
+        seller = seller_;
         deadline = deadline_;
-        
+
         maxAcceptedUsdValue = maxAcceptedUsdValue_;
 
         for (uint256 i = 0; i < supportedTokenAddresses.length; i++) {
@@ -77,43 +81,59 @@ contract SimplePay is AccessControl, ReentrancyGuard {
         initialized = true;
     }
 
+    function setChainlinkPriceFeedAddress(
+        address chainlinkPriceFeedAddress
+    ) external onlyFactoryContract {
+        _chainlinkPriceFeedAddress = chainlinkPriceFeedAddress;
+    }
+
     receive() external payable {
         emit Received(msg.sender, msg.value);
     }
 
-    modifier onlyPermissioned() {
+    modifier sellerOrFactoryContract() {
         require(
-            msg.sender == seller ||
-                msg.sender == _factoryContractAddress,
-            "No permission!"
+            msg.sender == seller || msg.sender == _factoryContractAddress,
+            "SimplePay: no permission!"
         );
         _;
     }
 
-    modifier onlyOwner() {
-        require(hasRole(OWNER_ROLE, msg.sender), "Caller is not an owner");
+    modifier onlyFactoryContract() {
+        require(
+            msg.sender == _factoryContractAddress,
+            "SimplePay: caller is not a factory contract"
+        );
         _;
     }
 
-    function transferOwner(address newOwner) public onlyOwner {
-        _setupRole(OWNER_ROLE, newOwner);
-        _revokeRole(OWNER_ROLE, msg.sender);
+    modifier onlySeller() {
+        require(
+            hasRole(SELLER_ROLE, msg.sender),
+            "SimplePay: caller is not a seller"
+        );
+        _;
     }
 
-    function updateDeadline(uint256 deadline_) external onlyOwner {
+    function transferOwner(address newOwner) public onlySeller {
+        _setupRole(SELLER_ROLE, newOwner);
+        _revokeRole(SELLER_ROLE, msg.sender);
+    }
+
+    function updateDeadline(uint256 deadline_) external onlySeller {
         deadline = deadline_;
     }
 
     function updateMaxAcceptedUsdValue(
         uint256 maxAcceptedUsdValue_
-    ) external onlyOwner {
+    ) external onlySeller {
         maxAcceptedUsdValue = maxAcceptedUsdValue_;
     }
 
     function updateSupportToken(
         address supportedTokenAddress_,
         bool isSupported
-    ) external onlyPermissioned {
+    ) external sellerOrFactoryContract {
         supportedTokenAddress[supportedTokenAddress_] = isSupported;
         if (isSupported) {
             supportedTokenList.push(supportedTokenAddress_);
@@ -134,7 +154,9 @@ contract SimplePay is AccessControl, ReentrancyGuard {
         uint256 usdValue,
         address token
     ) public view returns (uint256) {
-        return ChainLinkPriceFeed(_chainlinkPriceFeedAddress).convertUsdToTokenPrice(usdValue, token);
+        return
+            ChainLinkPriceFeed(_chainlinkPriceFeedAddress)
+                .convertUsdToTokenPrice(usdValue, token);
     }
 
     function deposit(
@@ -144,20 +166,25 @@ contract SimplePay is AccessControl, ReentrancyGuard {
     ) public payable {
         require(
             usdValue <= maxAcceptedUsdValue,
-            "USD value is greater than max accepted usd value"
+            "SimplePay: USD value is greater than max accepted usd value"
         );
 
-        require(supportedTokenAddress[token], "Not supported token!");
-        require(!vpIds[vpId], "VP id is already used");
+        require(
+            supportedTokenAddress[token],
+            "SimplePay: not supported token!"
+        );
+        require(!vpIds[vpId], "SimplePay: vp id is already used");
 
         uint256 value = getPrice(usdValue, token);
 
         if (token == address(0)) {
-            require(msg.value >= value, "Insufficient native token balances");
-            value = msg.value; // ?
+            require(
+                msg.value >= value,
+                "SimplePay: insufficient native token balances"
+            );
+            value = msg.value;
 
             Address.sendValue(payable(address(this)), msg.value);
-            
         } else {
             IERC20(token).safeTransferFrom(
                 msg.sender,
@@ -165,10 +192,10 @@ contract SimplePay is AccessControl, ReentrancyGuard {
                 value
             );
         }
-        
+
         uint256 currentIndex = ++_depositItemCounter;
         uint256 depositDeadline = block.timestamp + deadline;
-        
+
         DepositItemStruct memory depositItem = DepositItemStruct({
             depositItemIndex: currentIndex,
             buyer: msg.sender,
@@ -180,23 +207,21 @@ contract SimplePay is AccessControl, ReentrancyGuard {
         depositItems[currentIndex] = depositItem;
         unReceivedItems[msg.sender].push(currentIndex);
         vpOfDepositItems[vpId] = currentIndex;
-        
+
         vpIds[vpId] = true;
     }
 
-    function setReceiveStatus(bytes32 vpId) external {
+    function setReceiveStatus(bytes32 vpId) external onlyFactoryContract {
         uint256 depositItemIndex = vpOfDepositItems[vpId];
-        require(
-            msg.sender == _factoryContractAddress,
-            "Caller is not a factory contract"
-        );
+
         require(
             isReceived[depositItemIndex] == false,
-            "This deposit item is already paid"
+            "SimplePay: this deposit item is already paid"
         );
+
         require(
             depositItems[depositItemIndex].buyer != address(0),
-            "This deposit item is not exist!"
+            "SimplePay: this deposit item is not exist!"
         );
 
         address buyer = depositItems[depositItemIndex].buyer;
@@ -221,19 +246,17 @@ contract SimplePay is AccessControl, ReentrancyGuard {
         ].value;
     }
 
-    function withdrawFund(
-        address token
-    ) external onlyOwner {
+    function withdrawFund(address token) external onlySeller {
         uint256 value = allowances[token];
 
         DepositFactoryContract depositFactoryContract = DepositFactoryContract(
             _factoryContractAddress
         );
-        
+
         uint256 platformFeePayAmount = depositFactoryContract.calcPayFeeAmount(
             value
         );
-        
+
         if (token == address(0)) {
             if (platformFeePayAmount > 0) {
                 Address.sendValue(
@@ -250,16 +273,13 @@ contract SimplePay is AccessControl, ReentrancyGuard {
                     platformFeePayAmount
                 );
             }
-            
-            IERC20(token).transfer(
-                seller,
-                value - platformFeePayAmount
-            );
+
+            IERC20(token).transfer(seller, value - platformFeePayAmount);
         }
-        
+
         emit WithdrawFund(token, msg.sender, value);
 
-        allowances[token] -= value;
+        allowances[token] = 0;
     }
 
     function refund(address token) public payable {
@@ -288,7 +308,8 @@ contract SimplePay is AccessControl, ReentrancyGuard {
                             .deadline,
                         value: depositItems[unReceivedItems[msg.sender][i]]
                             .value,
-                        token: depositItems[unReceivedItems[msg.sender][i]].token
+                        token: depositItems[unReceivedItems[msg.sender][i]]
+                            .token
                     });
                     total += depositItems[unReceivedItems[msg.sender][i]].value;
                     if (i != unReceivedItems[msg.sender].length - 1) {
@@ -305,10 +326,7 @@ contract SimplePay is AccessControl, ReentrancyGuard {
         if (token == address(0)) {
             Address.sendValue(payable(msg.sender), total);
         } else {
-            IERC20(token).transfer(
-                msg.sender,
-                total
-            );
+            IERC20(token).transfer(msg.sender, total);
         }
     }
 
@@ -321,32 +339,40 @@ contract SimplePay is AccessControl, ReentrancyGuard {
         }
     }
 
-    function withdrawDeposit(uint256 depositItemIndex) public {
+    modifier onlyBuyer(uint256 depositItemIndex) {
         require(
             depositItems[depositItemIndex].buyer == msg.sender,
-            "Caller is not a buyer"
+            "SimplePay: caller is not a buyer"
         );
-        
+
+        _;
+    }
+
+    function withdrawDeposit(
+        uint256 depositItemIndex
+    ) public onlyBuyer(depositItemIndex) {
+        // require(
+        //     depositItems[depositItemIndex].buyer == msg.sender,
+        //     "SimplePay: caller is not a buyer"
+        // );
+
         require(
             block.timestamp > depositItems[depositItemIndex].deadline,
-            "Deadline is not passed"
+            "SimplePay: deadline is not passed"
         );
-        
+
         require(
             isReceived[depositItemIndex] == false,
-            "This depositItem is already delivered"
+            "SimplePay: this depositItem is already delivered"
         );
-        
+
         uint256 value = depositItems[depositItemIndex].value;
         address token = depositItems[depositItemIndex].token;
 
         if (token == address(0)) {
             Address.sendValue(payable(msg.sender), value);
         } else {
-            IERC20(token).transfer(
-                msg.sender,
-                value
-            );
+            IERC20(token).transfer(msg.sender, value);
         }
 
         for (uint256 i = 0; i < unReceivedItems[msg.sender].length; ) {

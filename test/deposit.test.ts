@@ -29,6 +29,14 @@ const isFloatEqual = (a: number, b: number) => {
 
 const USD_DECIMALS = 8;
 
+const getUsdNumber = (amount: number) => {
+  return getBigNumber(amount, USD_DECIMALS);
+}
+
+const getUsdcNumber = (amount: number) => {
+  return getBigNumber(amount, 6);
+}
+
 const STATIC_PRICE_ = {
   ETH_USD: 187354820000, // decimal 8
   AVAX_USD: 1341998900, // decimal 8
@@ -42,19 +50,15 @@ console.log("USDC to USD:", STATIC_PRICE_.USDC_USD / 10 ** 8);
 const STATIC_NATIVE_PRICE = STATIC_PRICE_.ETH_USD;
 const STATIC_TOKEN_PRICE = STATIC_PRICE_.USDC_USD;
 
+const AccessControlInterfaceId = "0x01ffc9a7";
+const ERC1155InterfaceId = "0xd9b67a26";
+const ERC721InterfaceId = "0x80ac58cd";
+
 describe("Test multichain minting engine", () => {
   let usdcToken: TestToken;
 
-  let depositContract: DepositContract;
-
   let depositFactoryContract: DepositFactoryContract;
   let receiveFactoryContract: ReceiveFactoryContract;
-
-  let depositFactoryContractB: DepositFactoryContract;
-  let receiveFactoryContractB: ReceiveFactoryContract;
-
-  let NftContract: ERC1155;
-  let NftContractB: ERC1155;
 
   let rPaymentContract: RPaymentContract;
 
@@ -78,7 +82,7 @@ describe("Test multichain minting engine", () => {
   let nftName = "Banh tet La Cam";
   let nftSymbol = "bTET";
 
-  const tokenUri = "https://bafybeidyj2ases25wrcwyisxsbnfo6qe7oe4re5ql77uspoo6d33benknq.ipfs.nftstorage.link/";
+  const tokenURI = "https://bafybeidyj2ases25wrcwyisxsbnfo6qe7oe4re5ql77uspoo6d33benknq.ipfs.nftstorage.link/";
   const totalSupply = 100;
 
   const erc20TokenName = "USDC";
@@ -127,18 +131,28 @@ describe("Test multichain minting engine", () => {
     depositFactoryContract = (await DepositFactoryContractFactory.deploy(
       ownerAddress,
       adminWalletAddress,
-      validatorRoleAccountAddress,
-      chainlinkPriceFeed.address
+      validatorRoleAccountAddress
     )) as DepositFactoryContract;
     await depositFactoryContract.deployed();
 
-    depositFactoryContractB = (await DepositFactoryContractFactory.deploy(
-      ownerAddress,
-      adminWalletAddress,
-      validatorRoleAccountAddress,
-      chainlinkPriceFeed.address
-    )) as DepositFactoryContract;
-    await depositFactoryContractB.deployed();
+    await depositFactoryContract
+      .connect(owner)
+      .setupValidatorRole(validatorRoleAccountAddress);
+
+    await expect(depositFactoryContract
+      .connect(owner)
+      .revokeValidatorRole(validatorRoleAccountAddress)).to.be.fulfilled;
+
+    await expect(depositFactoryContract
+      .connect(owner)
+      .setupValidatorRole(validatorRoleAccountAddress)).to.be.fulfilled;
+
+    await expect(depositFactoryContract
+      .connect(owner)
+      .setAdminWallet(adminWalletAddress)).to.be.fulfilled;
+
+    await expect(depositFactoryContract.supportsInterface(AccessControlInterfaceId)).to.be.fulfilled;
+    expect(await depositFactoryContract.supportsInterface(AccessControlInterfaceId)).to.be.true;
 
     const ReceiveFactoryContractFactory = await ethers.getContractFactory(
       "ReceiveFactoryContract"
@@ -146,9 +160,6 @@ describe("Test multichain minting engine", () => {
 
     receiveFactoryContract = (await ReceiveFactoryContractFactory.connect(owner).deploy()) as ReceiveFactoryContract;
     await receiveFactoryContract.deployed();
-
-    receiveFactoryContractB = (await ReceiveFactoryContractFactory.connect(owner).deploy()) as ReceiveFactoryContract;
-    await receiveFactoryContractB.deployed();
 
     await usdcToken.mint(
       clientWalletAddress,
@@ -171,14 +182,11 @@ describe("Test multichain minting engine", () => {
     const erc1155Contract = await ERC1155Contract.deploy();
     await erc1155Contract.deployed();
 
-    await (
-      await receiveFactoryContract.setMasterNftContractAddress(
-        erc1155Contract.address
-      )
-    ).wait();
+    expect(await erc1155Contract.supportsInterface(AccessControlInterfaceId)).to.be.true;
+    expect(await erc1155Contract.supportsInterface(ERC1155InterfaceId)).to.be.true;
 
     await (
-      await receiveFactoryContractB.setMasterNftContractAddress(
+      await receiveFactoryContract.setMasterNftContractAddress(
         erc1155Contract.address
       )
     ).wait();
@@ -193,11 +201,7 @@ describe("Test multichain minting engine", () => {
       )
     ).wait();
 
-    await (
-      await depositFactoryContractB.setMasterDepositContractAddress(
-        depositContract.address
-      )
-    ).wait();
+    expect(await depositContract.supportsInterface(ERC721InterfaceId)).to.be.true;
 
     const SimplePayContract = await ethers.getContractFactory("SimplePay");
     const simplePayContract = await SimplePayContract.deploy();
@@ -205,12 +209,6 @@ describe("Test multichain minting engine", () => {
 
     await (
       await depositFactoryContract.setMasterPayContractAddress(
-        simplePayContract.address
-      )
-    ).wait();
-
-    await (
-      await depositFactoryContractB.setMasterPayContractAddress(
         simplePayContract.address
       )
     ).wait();
@@ -228,13 +226,13 @@ describe("Test multichain minting engine", () => {
   });
 
   describe("Test", async () => {
-    it("[ERC1155Contract] seller cann't create more than one NFT contract", async () => {
+    it("[ReceiveFactoryContract] seller can not create more than one NFT contract", async () => {
       await expect(
         receiveFactoryContract
           .connect(sellerWallet)
           .createNftContractBySeller(
-            tokenUri,
-            1 * 10 ** USD_DECIMALS, // 1 USD
+            tokenURI,
+            getUsdNumber(1)
           )
       ).to.be.fulfilled;
 
@@ -242,10 +240,10 @@ describe("Test multichain minting engine", () => {
         receiveFactoryContract
           .connect(sellerWallet)
           .createNftContractBySeller(
-            tokenUri,
-            1 * 10 ** USD_DECIMALS, // 1 USD
+            tokenURI,
+            getUsdNumber(1)
           )
-      ).to.be.revertedWith("Already created nft contract.");
+      ).to.be.revertedWith("ReceiveFactoryContract: already created nft contract.");
 
       const nftContractAddress = await receiveFactoryContract.getNftContractsOfAccount(
         sellerWalletAddress
@@ -262,11 +260,14 @@ describe("Test multichain minting engine", () => {
         nftContract.getNumberOfMintedTokens()
       ).to.be.fulfilled;
 
-      const tokenUri_ = await nftContract.uri(1);
-      expect(tokenUri_).to.be.equal(`${tokenUri}1`);
+      await expect(nftContract.connect(clientWallet).setFactoryContractAddress(depositFactoryContract.address)).to.be.revertedWith("ERC1155: caller is not a seller");
+      await expect(nftContract.connect(sellerWallet).setFactoryContractAddress(depositFactoryContract.address)).to.be.fulfilled;
+
+      const tokenURI_ = await nftContract.uri(1);
+      expect(tokenURI_).to.be.equal(`${tokenURI}1`);
 
       const usdPrice = await nftContract.usdPrice();
-      expect(usdPrice).to.be.equal(1 * 10 ** USD_DECIMALS);
+      expect(usdPrice).to.be.equal(getUsdNumber(1));
 
       const owner_ = await nftContract.owner();
       expect(owner_).to.be.equal(sellerWalletAddress);
@@ -285,9 +286,9 @@ describe("Test multichain minting engine", () => {
       const nftSymbol_ = await nftContract.symbol();
       expect(nftSymbol_).to.be.equal(nftSymbol);
 
-      await expect(receiveFactoryContract.connect(validatorRoleAccount).setBaseUri(
+      await expect(receiveFactoryContract.connect(validatorRoleAccount).setBaseURI(
         nftContract.address,
-        tokenUri
+        tokenURI
       )).to.be.fulfilled;
 
       await expect(receiveFactoryContract.connect(validatorRoleAccount).setName(
@@ -319,27 +320,26 @@ describe("Test multichain minting engine", () => {
         ethers.constants.AddressZero,
         2,
         "0x"
-      )).to.be.revertedWith("Address must not be zero address");
+      )).to.be.revertedWith("ERC1155: address must not be zero address");
     });
 
-    it("[StaticDataFeed] latestRoundData", async () => {
+    it("[StaticDataFeed] latest round data", async () => {
       let price: BigNumber;
       [, price, , ,] = await staticNativeTokenFeed.latestRoundData();
       expect(price).to.be.equal(STATIC_NATIVE_PRICE);
     });
 
-    it("[PriceFeed] convertUsdToTokenPrice", async () => {
-      const usdValue = 1 * 10 ** USD_DECIMALS; // 1 USD
+    it("[PriceFeed] convert USD to token amount", async () => {
+      const usdValue = getUsdNumber(1);
       const usdValueToNativeToken = await chainlinkPriceFeed.convertUsdToTokenPrice(usdValue, ethers.constants.AddressZero);
       const nativeToken = Number(usdValueToNativeToken) / 10 ** 18; // 18 is the decimals of native token
       expect(isFloatEqual(nativeToken, 0.00053)).to.be.true; // ETH
-      // expect(isFloatEqual(nativeToken, 0.07452)).to.be.true; // AVAX
     });
 
-    it("[Paylink] pay: revert with 'Not supported token!'", async () => {
+    it("[Paylink] pay: revert with 'Paylink: not supported token!'", async () => {
       const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("test"));
 
-      const usdValue = 1 * 10 ** USD_DECIMALS; // 1 USD
+      const usdValue = getUsdNumber(1);
 
       await expect(
         rPaymentContract.connect(clientWallet).pay(
@@ -348,13 +348,13 @@ describe("Test multichain minting engine", () => {
           usdValue,
           vpId
         )
-      ).to.be.revertedWith("Not supported token!");
+      ).to.be.revertedWith("Paylink: not supported token!");
     });
 
-    it("[Paylink] pay: revert with 'Insufficient native token balances'", async () => {
+    it("[Paylink] pay: revert with 'Paylink: insufficient native token balances'", async () => {
       const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("test"));
 
-      const usdValue = 1 * 10 ** USD_DECIMALS; // 1 USD
+      const usdValue = getUsdNumber(1);
 
       await expect(
         rPaymentContract.connect(clientWallet).pay(
@@ -363,13 +363,13 @@ describe("Test multichain minting engine", () => {
           usdValue,
           vpId
         )
-      ).to.be.revertedWith("Insufficient native token balances");
+      ).to.be.revertedWith("Paylink: insufficient native token balances");
     });
 
-    it("[Paylink] pay: revert with 'Insufficient native token balances'", async () => {
+    it("[Paylink] pay: revert with 'Paylink: Insufficient native token balances'", async () => {
       const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("test"));
 
-      const usdValue = 1 * 10 ** USD_DECIMALS; // 1 USD
+      const usdValue = getUsdNumber(1);
 
       const price: BigNumber = await rPaymentContract.getPrice(usdValue, ethers.constants.AddressZero);
 
@@ -382,13 +382,13 @@ describe("Test multichain minting engine", () => {
           value: price.sub(1),
         }
         )
-      ).to.be.revertedWith("Insufficient native token balances");
+      ).to.be.revertedWith("Paylink: insufficient native token balances");
     });
 
-    it("[Paylink] pay", async () => {
+    it("[Paylink] pay: happy case", async () => {
       const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("test"));
 
-      const usdValue = 1 * 10 ** USD_DECIMALS; // 1 USD
+      const usdValue = getUsdNumber(1);
 
       const price: BigNumber = await rPaymentContract.getPrice(usdValue, ethers.constants.AddressZero);
 
@@ -409,10 +409,10 @@ describe("Test multichain minting engine", () => {
       expect(value_).to.be.equal(price);
     });
 
-    it("[Paylink] pay: revert with 'Already paid!'", async () => {
+    it("[Paylink] pay: revert with 'Paylink: already paid!'", async () => {
       const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("test"));
 
-      const usdValue = 1 * 10 ** USD_DECIMALS; // 1 USD
+      const usdValue = getUsdNumber(1);
 
       const price: BigNumber = await rPaymentContract.getPrice(usdValue, ethers.constants.AddressZero);
 
@@ -425,12 +425,12 @@ describe("Test multichain minting engine", () => {
           value: price,
         }
         )
-      ).to.be.revertedWith("Already paid!");
+      ).to.be.revertedWith("Paylink: already paid!");
     });
 
-    it("[Recurring Payment] setupByValidator", async () => {
+    it("[Recurring Payment] setup by sprynt's validator", async () => {
       const subscriptionId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("subscription_id"));
-      const usdValue = 1 * 10 ** USD_DECIMALS; // 1 USD
+      const usdValue = getUsdNumber(1);
       const duration = 5; // 5 seconds
 
       await expect(
@@ -446,15 +446,15 @@ describe("Test multichain minting engine", () => {
       expect(usdValue_).to.be.equal(usdValue);
       expect(duration_).to.be.equal(duration);
 
-      const sellerAddress_ = await rPaymentContract.ownerOfSubscription(subscriptionId);
+      const sellerAddress_ = await rPaymentContract.subscriptionOwner(subscriptionId);
       expect(sellerAddress_).to.be.equal(sellerWalletAddress);
     });
 
-    it("[Recurring Payment] subscribe / native token: revert with 'Not supported native token!'", async () => {
+    it("[Recurring Payment] subscribe / native token: revert with 'RPaymentContract: not supported native token!'", async () => {
       const subscriptionId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("subscription_id"));
       const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("vp_id"));
 
-      const usdValue = 1 * 10 ** USD_DECIMALS; // 1 USD
+      const usdValue = getUsdNumber(1);
       const price = await rPaymentContract.getPrice(usdValue, ethers.constants.AddressZero);
 
       await expect(
@@ -467,14 +467,14 @@ describe("Test multichain minting engine", () => {
             value: price,
           }
         )
-      ).to.be.revertedWith("Not supported native token!");
+      ).to.be.revertedWith("RPaymentContract: not supported native token!");
     });
 
     it("[Recurring Payment] subscribe / custom token", async () => {
       const subscriptionId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("subscription_id"));
       const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("vp_id"));
 
-      const usdValue = 1 * 10 ** USD_DECIMALS; // 1 USD
+      const usdValue = getUsdNumber(1);
 
       const [tokenSymbol, tokenDecimals] = await chainlinkPriceFeed.getTokenInfo(usdcToken.address);
       expect(tokenSymbol).to.be.equal("USDC");
@@ -493,7 +493,7 @@ describe("Test multichain minting engine", () => {
       ).to.be.equal(staticCustomTokenFeed.address)
 
       const price = await rPaymentContract.getPrice(usdValue, usdcToken.address);
-      expect(price.div(10 ** tokenDecimals)).to.be.equal(usdValue / 10 ** USD_DECIMALS);
+      expect(price.div(10 ** tokenDecimals)).to.be.equal(usdValue.div(10 ** USD_DECIMALS));
 
       await expect(
         rPaymentContract.connect(clientWallet).subscribe(
@@ -540,7 +540,7 @@ describe("Test multichain minting engine", () => {
           value: 0,
         }
         )
-      ).to.be.revertedWith("Already subscribe!");
+      ).to.be.revertedWith("RPaymentContract: already subscribe!");
 
       const newVpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("new_vp_id"));
 
@@ -564,7 +564,7 @@ describe("Test multichain minting engine", () => {
           clientWalletAddress,
           vpId,
         )
-      ).to.be.revertedWith("Not yet time!");
+      ).to.be.revertedWith("RPaymentContract: not yet time to renew!");
 
       await delay(5_000);
 
@@ -601,10 +601,10 @@ describe("Test multichain minting engine", () => {
           clientWalletAddress,
           vpId,
         )
-      ).to.be.revertedWith("Subscription is disabled!");
+      ).to.be.revertedWith("RPaymentContract: subscription is disabled!");
     });
 
-    const maxAcceptedUsdValue = 3 * 10 ** USD_DECIMALS; // 3 USD
+    const maxAcceptedUsdValue = getUsdNumber(3);
     const deadline = 0; // 0 seconds
 
     it("[DepositFactoryContract] createPayContractBySeller", async () => {
@@ -639,6 +639,13 @@ describe("Test multichain minting engine", () => {
       expect(calcPayFeeAmount).to.be.equal(0);
 
       await expect(
+        depositFactoryContract.connect(owner).setPayChainlinkPriceFeedAddress(
+          sellerWalletAddress,
+          chainlinkPriceFeed.address
+        )
+      ).to.be.fulfilled;
+
+      await expect(
         simplePayContract.connect(sellerWallet).updateMaxAcceptedUsdValue(
           maxAcceptedUsdValue
         )
@@ -664,10 +671,10 @@ describe("Test multichain minting engine", () => {
       await expect(
         simplePayContract.connect(clientWallet).deposit(
           ethers.constants.AddressZero,
-          maxAcceptedUsdValue + 1,
+          maxAcceptedUsdValue.add(1),
           vpId
         )
-      ).to.be.revertedWith("USD value is greater than max accepted usd value");
+      ).to.be.revertedWith("SimplePay: USD value is greater than max accepted usd value");
 
       await expect(
         simplePayContract.connect(clientWallet).deposit(
@@ -675,25 +682,25 @@ describe("Test multichain minting engine", () => {
           maxAcceptedUsdValue,
           vpId
         )
-      ).to.be.revertedWith("Not supported token!");
+      ).to.be.revertedWith("SimplePay: not supported token!");
 
       await expect(
         simplePayContract.connect(clientWallet).deposit(
           ethers.constants.AddressZero,
-          1 * 10 ** USD_DECIMALS,
+          getUsdNumber(1),
           vpId,
           {
             value: 0,
           }
         )
-      ).to.be.revertedWith("Insufficient native token balances");
+      ).to.be.revertedWith("SimplePay: insufficient native token balances");
 
-      const price = await simplePayContract.getPrice(1 * 10 ** USD_DECIMALS, ethers.constants.AddressZero); // wei
+      const price = await simplePayContract.getPrice(getUsdNumber(1), ethers.constants.AddressZero); // wei
 
       await expect(
         simplePayContract.connect(clientWallet).deposit(
           ethers.constants.AddressZero,
-          1 * 10 ** USD_DECIMALS,
+          getUsdNumber(1),
           vpId,
           {
             value: price,
@@ -731,7 +738,7 @@ describe("Test multichain minting engine", () => {
           maxAcceptedUsdValue,
           vpId
         )
-      ).to.be.revertedWith("VP id is already used");
+      ).to.be.revertedWith("SimplePay: vp id is already used");
 
       const newVpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("new_pay_vp_id"));
 
@@ -743,7 +750,7 @@ describe("Test multichain minting engine", () => {
         )
       ).to.be.revertedWith("ERC20: insufficient allowance");
 
-      const usdcPrice = await simplePayContract.getPrice(1 * 10 ** USD_DECIMALS, usdcToken.address); // wei
+      const usdcPrice = await simplePayContract.getPrice(getUsdNumber(1), usdcToken.address); // wei
 
       await expect(
         usdcToken.connect(clientWallet).approve(simplePayContract.address, usdcPrice)
@@ -755,21 +762,21 @@ describe("Test multichain minting engine", () => {
       await expect(
         simplePayContract.connect(clientWallet).deposit(
           usdcToken.address,
-          1 * 10 ** USD_DECIMALS,
+          getUsdNumber(1),
           newVpId
         )
       ).to.be.fulfilled;
 
       balanceOf_ = await usdcToken.balanceOf(simplePayContract.address);
-      expect(balanceOf_).to.be.equal(1 * 10 ** 6);
+      expect(balanceOf_).to.be.equal(getUsdcNumber(1));
 
       await expect(
         simplePayContract.connect(sellerWallet).setReceiveStatus(vpId)
-      ).to.be.revertedWith("Caller is not a factory contract");
+      ).to.be.revertedWith("SimplePay: caller is not a factory contract");
 
       await expect(
         depositFactoryContract.connect(sellerWallet).setPayReceiveStatus(sellerWalletAddress, vpId)
-      ).to.be.revertedWith("Sender does not have the required role");
+      ).to.be.revertedWith("DepositFactoryContract: sender does not have the required role");
 
       await expect(
         depositFactoryContract.connect(validatorRoleAccount).setPayReceiveStatus(sellerWalletAddress, vpId)
@@ -781,10 +788,10 @@ describe("Test multichain minting engine", () => {
 
       await expect(
         depositFactoryContract.connect(validatorRoleAccount).setPayReceiveStatus(sellerWalletAddress, vpId)
-      ).to.be.revertedWith("This deposit item is already paid");
+      ).to.be.revertedWith("SimplePay: this deposit item is already paid");
     });
 
-    it("[Simple Pay] withdrawDeposit", async () => {
+    it("[Simple Pay] withdraw deposit", async () => {
       const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("pay_vp_id"));
       const newVpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("new_pay_vp_id"));
 
@@ -797,17 +804,17 @@ describe("Test multichain minting engine", () => {
 
       await expect(
         simplePayContract.connect(sellerWallet).withdrawDeposit(depositItemIndex1)
-      ).to.be.revertedWith("Caller is not a buyer");
+      ).to.be.revertedWith("SimplePay: caller is not a buyer");
 
       await expect(
         simplePayContract.connect(clientWallet).withdrawDeposit(depositItemIndex1)
-      ).to.be.revertedWith("This depositItem is already delivered");
+      ).to.be.revertedWith("SimplePay: this depositItem is already delivered");
 
       const depositItemIndex2 = await simplePayContract.vpOfDepositItems(newVpId);
       expect(depositItemIndex2).to.be.equal(2);
 
       let balanceOf_ = await usdcToken.balanceOf(simplePayContract.address);
-      expect(balanceOf_).to.be.equal(1 * 10 ** 6);
+      expect(balanceOf_).to.be.equal(getUsdcNumber(1));
 
       await expect(
         simplePayContract.connect(clientWallet).withdrawDeposit(depositItemIndex2)
@@ -818,17 +825,17 @@ describe("Test multichain minting engine", () => {
 
       await expect(
         simplePayContract.connect(clientWallet).withdrawDeposit(depositItemIndex2)
-      ).to.be.revertedWith("Caller is not a buyer");
+      ).to.be.revertedWith("SimplePay: caller is not a buyer");
     });
 
-    it("[Simple Pay] withdrawFund", async () => {
+    it("[Simple Pay] withdraw fund", async () => {
       const payContractAddress = await depositFactoryContract.getPayContract(sellerWalletAddress);
       const simplePayContract = await ethers.getContractAt("SimplePay", payContractAddress) as SimplePay;
 
       expect(await simplePayContract.allowances(ethers.constants.AddressZero)).to.be.equal(533746609774971);
       expect(await simplePayContract.allowances(usdcToken.address)).to.be.equal(0);
 
-      const usdValue = 2 * 10 ** USD_DECIMALS;
+      const usdValue = getUsdNumber(2);
 
       const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("new_pay_vp_id_withdraw_fund"));
       const price = await simplePayContract.getPrice(usdValue, usdcToken.address);
@@ -852,7 +859,7 @@ describe("Test multichain minting engine", () => {
 
       await expect(
         simplePayContract.connect(clientWallet).withdrawFund(usdcToken.address)
-      ).to.be.revertedWith("Caller is not an owner");
+      ).to.be.revertedWith("SimplePay: caller is not a seller");
 
       await expect(
         simplePayContract.connect(sellerWallet).withdrawFund(usdcToken.address)
@@ -873,7 +880,7 @@ describe("Test multichain minting engine", () => {
       const payContractAddress = await depositFactoryContract.getPayContract(sellerWalletAddress);
       const simplePayContract = await ethers.getContractAt("SimplePay", payContractAddress) as SimplePay;
 
-      const usdValue = 3 * 10 ** USD_DECIMALS;
+      const usdValue = getUsdNumber(3);
 
       const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("new_pay_vp_id_refund"));
       const price = await simplePayContract.getPrice(usdValue, usdcToken.address);
@@ -904,8 +911,8 @@ describe("Test multichain minting engine", () => {
     });
 
     it("[Deposit Contract] initialize", async () => {
-      const usdMintPrice = 2 * 10 ** USD_DECIMALS;
-      const usdWhitelistMintPrice = 1 * 10 ** USD_DECIMALS;
+      const usdMintPrice = getUsdNumber(2);
+      const usdWhitelistMintPrice = getUsdNumber(1);
       const deadline = Math.floor(Date.now() / 1000) + 2; // 2 seconds
 
       await expect(
@@ -930,8 +937,8 @@ describe("Test multichain minting engine", () => {
         depositFactoryContract.connect(owner).createDepositContractBySeller(
           sellerWalletAddress,
           [ethers.constants.AddressZero],
-          usdMintPrice + 1,
-          usdWhitelistMintPrice + 1,
+          usdMintPrice.add(1),
+          usdWhitelistMintPrice.add(1),
           0,
           2,
           12,
@@ -966,7 +973,28 @@ describe("Test multichain minting engine", () => {
           usdcToken.address,
           true
         )
-      ).to.be.revertedWith("Deposit contract is not created.");
+      ).to.be.revertedWith("DepositFactoryContract: deposit contract is not created.");
+
+      await expect(
+        depositFactoryContract.connect(validatorRoleAccount).setTokenName(
+          sellerWalletAddress,
+          nftName
+        )
+      ).to.be.fulfilled;
+
+      await expect(
+        depositFactoryContract.connect(validatorRoleAccount).setTokenBaseURI(
+          sellerWalletAddress,
+          tokenURI
+        )
+      ).to.be.fulfilled;
+
+      await expect(
+        depositFactoryContract.connect(validatorRoleAccount).setTokenSymbol(
+          sellerWalletAddress,
+          nftSymbol
+        )
+      ).to.be.fulfilled;
 
       await expect(
         depositFactoryContract.connect(validatorRoleAccount).changeMintPrice(
@@ -1011,17 +1039,17 @@ describe("Test multichain minting engine", () => {
       ).to.be.fulfilled;
 
       await expect(
-        depositFactoryContract.connect(validatorRoleAccount).setTokenUri(
+        depositFactoryContract.connect(validatorRoleAccount).setTokenURI(
           sellerWalletAddress,
           1,
-          `${tokenUri}1`
+          `${tokenURI}1`
         )
       ).to.be.fulfilled;
 
       await expect(
-        depositFactoryContract.connect(validatorRoleAccount).setTokenBaseUri(
+        depositFactoryContract.connect(validatorRoleAccount).setTokenBaseURI(
           sellerWalletAddress,
-          tokenUri
+          tokenURI
         )
       ).to.be.fulfilled;
 
@@ -1030,7 +1058,7 @@ describe("Test multichain minting engine", () => {
 
       await expect(
         depositFactoryContract.connect(owner).pause()
-      ).to.be.revertedWith("Caller is not the admin");
+      ).to.be.revertedWith("DepositFactoryContract: caller is not the admin wallet");
 
       await expect(
         depositFactoryContract.connect(adminWallet).pause()
@@ -1049,18 +1077,18 @@ describe("Test multichain minting engine", () => {
 
       await expect(
         depositFactoryContract.connect(sellerWallet).unpause()
-      ).to.be.revertedWith("Caller is not the admin");
+      ).to.be.revertedWith("DepositFactoryContract: caller is not the admin wallet");
 
       await expect(
         depositFactoryContract.connect(adminWallet).unpause()
       ).to.be.fulfilled;
     });
 
-    it("[Deposit Contract] mint: native token", async () => {
+    it("[Deposit Contract] mint / native token", async () => {
       const depositItem = {
         sellerAddress: sellerWalletAddress,
         mintQuantity: 1,
-        mintPrice: 2 * 10 ** USD_DECIMALS,
+        mintPrice: getUsdNumber(2),
       };
 
       const depositContractAddress = await depositFactoryContract.getDepositContract(
@@ -1073,12 +1101,24 @@ describe("Test multichain minting engine", () => {
         depositContractAddress
       ) as DepositContract;
 
+      expect(
+        await depositContract.name()
+      ).to.be.equal(nftName);
+
+      expect(
+        await depositContract.symbol()
+      ).to.be.equal(nftSymbol);
+
+      expect(
+        await depositContract.tokenURI(0)
+      ).to.be.equal(`${tokenURI}0`);
+
       await expect(
         depositContract.connect(clientWallet).mint(
           depositItem,
           ethers.constants.AddressZero,
         )
-      ).to.be.revertedWith("We have not ready yet!");
+      ).to.be.revertedWith("DepositContract: we have not ready yet!");
 
       expect(
         await depositContract.initialized()
@@ -1099,7 +1139,7 @@ describe("Test multichain minting engine", () => {
           },
           ethers.constants.AddressZero,
         )
-      ).to.be.revertedWith("Invalid seller!");
+      ).to.be.revertedWith("DepositContract: invalid seller!");
 
       await expect(
         depositContract.connect(clientWallet).mint(
@@ -1109,14 +1149,14 @@ describe("Test multichain minting engine", () => {
           },
           ethers.constants.AddressZero,
         )
-      ).to.be.revertedWith("Invalid mint quantity!");
+      ).to.be.revertedWith("DepositContract: invalid mint quantity!");
 
       await expect(
         depositContract.connect(clientWallet).mint(
           depositItem,
           ethers.constants.AddressZero,
         )
-      ).to.be.revertedWith("You are not in white list!");
+      ).to.be.revertedWith("DepositContract: you are not in white list!");
 
       await expect(
         depositFactoryContract.connect(validatorRoleAccount).addWhiteList(
@@ -1130,30 +1170,30 @@ describe("Test multichain minting engine", () => {
           depositItem,
           ethers.constants.AddressZero,
         )
-      ).to.be.revertedWith("Invalid white list mint price!");
+      ).to.be.revertedWith("DepositContract: invalid white list mint price!");
 
       await expect(
         depositContract.connect(clientWallet).mint(
           {
             ...depositItem,
-            mintPrice: 1 * 10 ** USD_DECIMALS,
+            mintPrice: getUsdNumber(1),
           },
           usdcToken.address,
         )
-      ).to.be.revertedWith("Not supported token!");
+      ).to.be.revertedWith("DepositContract: not supported token!");
 
       await expect(
         depositContract.connect(clientWallet).mint(
           {
             ...depositItem,
-            mintPrice: 1 * 10 ** USD_DECIMALS,
+            mintPrice: getUsdNumber(1),
           },
           ethers.constants.AddressZero,
         )
-      ).to.be.revertedWith("Insufficient native token balances");
+      ).to.be.revertedWith("DepositContract: insufficient native token balances");
 
       const price = await depositContract.getPrice(
-        1 * 10 ** USD_DECIMALS,
+        getUsdNumber(1),
         ethers.constants.AddressZero,
       );
 
@@ -1161,7 +1201,7 @@ describe("Test multichain minting engine", () => {
         depositContract.connect(clientWallet).mint(
           {
             ...depositItem,
-            mintPrice: 1 * 10 ** USD_DECIMALS,
+            mintPrice: getUsdNumber(1),
           },
           ethers.constants.AddressZero,
           {
@@ -1177,11 +1217,11 @@ describe("Test multichain minting engine", () => {
       expect(token_).to.be.equal(ethers.constants.AddressZero);
     });
 
-    it("[Deposit Contract] mint: custom token", async () => {
+    it("[Deposit Contract] mint / custom token", async () => {
       const depositItem = {
         sellerAddress: sellerWalletAddress,
         mintQuantity: 1,
-        mintPrice: 2 * 10 ** USD_DECIMALS,
+        mintPrice: getUsdNumber(2),
       };
 
       const depositContractAddress = await depositFactoryContract.getDepositContract(
@@ -1195,7 +1235,7 @@ describe("Test multichain minting engine", () => {
       ) as DepositContract;
 
       const price = await depositContract.getPrice(
-        1 * 10 ** USD_DECIMALS,
+        getUsdNumber(1),
         usdcToken.address,
       );
 
@@ -1203,11 +1243,11 @@ describe("Test multichain minting engine", () => {
         depositContract.connect(clientWallet).mint(
           {
             ...depositItem,
-            mintPrice: 1 * 10 ** USD_DECIMALS,
+            mintPrice: getUsdNumber(1),
           },
           usdcToken.address,
         )
-      ).to.be.revertedWith("Not supported token!");
+      ).to.be.revertedWith("DepositContract: not supported token!");
 
       await expect(
         depositFactoryContract.connect(validatorRoleAccount).updateSupportTokenOfDepositContract(
@@ -1221,7 +1261,7 @@ describe("Test multichain minting engine", () => {
         depositContract.connect(clientWallet).mint(
           {
             ...depositItem,
-            mintPrice: 1 * 10 ** USD_DECIMALS,
+            mintPrice: getUsdNumber(1),
           },
           usdcToken.address,
         )
@@ -1238,7 +1278,7 @@ describe("Test multichain minting engine", () => {
         depositContract.connect(clientWallet).mint(
           {
             ...depositItem,
-            mintPrice: 1 * 10 ** USD_DECIMALS,
+            mintPrice: getUsdNumber(1),
           },
           usdcToken.address,
         )
@@ -1261,14 +1301,14 @@ describe("Test multichain minting engine", () => {
         depositContract.connect(clientWallet).mint(
           {
             ...depositItem,
-            mintPrice: 1 * 10 ** USD_DECIMALS,
+            mintPrice: getUsdNumber(1),
           },
           usdcToken.address,
         )
       ).to.be.fulfilled;
     });
 
-    it("[Deposit Contract] setReceiveStatus", async () => {
+    it("[Deposit Contract] set receive status", async () => {
       const depositContractAddress = await depositFactoryContract.getDepositContract(
         sellerWalletAddress
       );
@@ -1281,15 +1321,15 @@ describe("Test multichain minting engine", () => {
 
       await expect(
         depositContract.connect(clientWallet).setReceiveStatus(1)
-      ).to.be.revertedWith("Caller is not a factory contract");
+      ).to.be.revertedWith("DepositContract: caller is not a factory contract");
 
       await expect(
         depositContract.connect(sellerWallet).setReceiveStatus(1)
-      ).to.be.revertedWith("Caller is not a factory contract");
+      ).to.be.revertedWith("DepositContract: caller is not a factory contract");
 
       await expect(
         depositContract.connect(validatorRoleAccount).setReceiveStatus(1)
-      ).to.be.revertedWith("Caller is not a factory contract");
+      ).to.be.revertedWith("DepositContract: caller is not a factory contract");
 
       await expect(
         depositFactoryContract.connect(validatorRoleAccount).setReceiveStatus(
@@ -1303,7 +1343,7 @@ describe("Test multichain minting engine", () => {
           sellerWalletAddress,
           1
         )
-      ).to.be.revertedWith("This deposit item is already received!");
+      ).to.be.revertedWith("DepositContract: this deposit item is already received!");
 
       let _mintedTokens = await depositContract.getTotalMintedToken();
       expect(_mintedTokens).to.be.equal(1);
@@ -1320,7 +1360,7 @@ describe("Test multichain minting engine", () => {
           sellerWalletAddress,
           2
         )
-      ).to.be.revertedWith("Exceed total supply!");
+      ).to.be.revertedWith("DepositContract: exceed total supply!");
 
       await expect(
         depositFactoryContract.connect(validatorRoleAccount).changeTotalSupply(
@@ -1340,7 +1380,7 @@ describe("Test multichain minting engine", () => {
       expect(_mintedTokens).to.be.equal(2);
     });
 
-    it("[Deposit Contract] withdrawDeposit", async () => {
+    it("[Deposit Contract] withdraw deposit", async () => {
       const depositContractAddress = await depositFactoryContract.getDepositContract(
         sellerWalletAddress
       );
@@ -1353,11 +1393,11 @@ describe("Test multichain minting engine", () => {
 
       await expect(
         depositContract.connect(clientWallet).withdrawDeposit(1)
-      ).to.be.revertedWith("This deposit item is already received!");
+      ).to.be.revertedWith("DepositContract: this deposit item is already received!");
 
       await expect(
         depositContract.connect(clientWallet).withdrawDeposit(2)
-      ).to.be.revertedWith("This deposit item is already received!");
+      ).to.be.revertedWith("DepositContract: this deposit item is already received!");
 
       const prevBalanceOf = await usdcToken.balanceOf(clientWalletAddress);
 
@@ -1366,11 +1406,11 @@ describe("Test multichain minting engine", () => {
       ).to.be.fulfilled;
 
       const curBalanceOf = await usdcToken.balanceOf(clientWalletAddress);
-      expect(curBalanceOf).to.be.equal(prevBalanceOf.add(1 * 10 ** 6)); // Plus 1 USDC
+      expect(curBalanceOf).to.be.equal(prevBalanceOf.add(getUsdcNumber(1))); // Plus 1 USDC
 
       await expect(
         depositContract.connect(clientWallet).withdrawDeposit(3)
-      ).to.be.revertedWith("Caller is not the owner of this deposit item!");
+      ).to.be.revertedWith("DepositContract: caller is not the owner of this deposit item!");
     });
 
     it("[Deposit Contract] utils", async () => {
@@ -1378,31 +1418,31 @@ describe("Test multichain minting engine", () => {
         sellerWalletAddress
       );
       expect(depositContractAddress).to.not.be.equal(ethers.constants.AddressZero);
-  
+
       const depositContract = await ethers.getContractAt(
         "DepositContract",
         depositContractAddress
       ) as DepositContract;
-  
+
       await expect(
         depositContract.getAllDepositItems()
       ).to.be.fulfilled;
-  
+
       await expect(
         depositContract.getDepositItemByIndex(1)
       ).to.be.fulfilled;
-  
+
       await expect(
         depositContract.getNumberOfDepositItems()
       ).to.be.fulfilled;
-  
+
       await expect(
         depositContract.getFactoryContractAddress()
       ).to.be.fulfilled;
 
       await expect(
         depositContract.removeWhiteList([clientWalletAddress])
-      ).to.be.revertedWith("No permission!");
+      ).to.be.revertedWith("DepositContract: no permission!");
 
       await expect(
         depositFactoryContract.connect(validatorRoleAccount).removeWhiteList(sellerWalletAddress, [clientWalletAddress])
@@ -1418,28 +1458,28 @@ describe("Test multichain minting engine", () => {
 
       expect(await depositContract.supportedTokenAddress(ethers.constants.AddressZero)).to.be.equal(false);
     });
-  
+
     it("[Deposit Contract] ERC721's function", async () => {
       const depositContractAddress = await depositFactoryContract.getDepositContract(
         sellerWalletAddress
       );
       expect(depositContractAddress).to.not.be.equal(ethers.constants.AddressZero);
-  
+
       const depositContract = await ethers.getContractAt(
         "DepositContract",
         depositContractAddress
       ) as DepositContract;
 
       await expect(
-        depositContract.baseUri()
+        depositContract.baseURI()
       ).to.be.fulfilled;
 
       await expect(
-        depositContract.connect(clientWallet).setOwner(clientWalletAddress, 1)
-      ).to.be.revertedWith("Caller is not a factory contract");
+        depositContract.connect(clientWallet).setOwner(clientWalletAddress, [1])
+      ).to.be.revertedWith("DepositContract: caller is not a factory contract");
 
       await expect(
-        depositFactoryContract.connect(validatorRoleAccount).setTokenOwner(sellerWalletAddress, clientWalletAddress, 1)
+        depositFactoryContract.connect(validatorRoleAccount).setTokenOwner(sellerWalletAddress, clientWalletAddress, [1])
       ).to.be.fulfilled;
 
       const balanceOf = await depositContract.balanceOf(clientWalletAddress);
@@ -1448,27 +1488,29 @@ describe("Test multichain minting engine", () => {
       const ownerOf = await depositContract.ownerOf(1);
       expect(ownerOf).to.be.equal(clientWalletAddress);
 
-      expect( await depositContract.balanceOf(validatorRoleAccountAddress)).to.be.equal(0);
+      expect(await depositContract.ownerOf(2)).to.be.equal(ethers.constants.AddressZero);
+
+      expect(await depositContract.balanceOf(validatorRoleAccountAddress)).to.be.equal(0);
 
       await expect(
         depositContract.connect(validatorRoleAccount).transfer(clientWalletAddress, validatorRoleAccountAddress, 1)
-      ).to.be.revertedWith("Caller is not a factory contract");
+      ).to.be.revertedWith("DepositContract: caller is not a factory contract");
 
-      expect( await depositContract.balanceOf(validatorRoleAccountAddress)).to.be.equal(0);
+      expect(await depositContract.balanceOf(validatorRoleAccountAddress)).to.be.equal(0);
 
       await expect(
         depositFactoryContract.connect(validatorRoleAccount).transferToken(sellerWalletAddress, clientWalletAddress, validatorRoleAccountAddress, 1)
       ).to.be.fulfilled;
 
-      expect( await depositContract.balanceOf(validatorRoleAccountAddress)).to.be.equal(1);
-      expect( await depositContract.balanceOf(clientWalletAddress)).to.be.equal(1);
+      expect(await depositContract.balanceOf(validatorRoleAccountAddress)).to.be.equal(1);
+      expect(await depositContract.balanceOf(clientWalletAddress)).to.be.equal(1);
     });
 
     it("[Deposit Factory Contract] utils", async () => {
       await expect(
         depositFactoryContract.getAdminWallet()
       ).to.be.fulfilled;
-      
+
       await expect(
         depositFactoryContract.connect(validatorRoleAccount).changeMinMintQuantity(
           sellerWalletAddress,
@@ -1483,58 +1525,9 @@ describe("Test multichain minting engine", () => {
         )
       ).to.be.fulfilled;
 
-
-      const usdValue = 1000 * 10 ** USD_DECIMALS;
-
       await expect(
-        depositFactoryContract.connect(clientWallet).withdraw(
-          usdcToken.address,
-          usdValue,
-        )
-      ).to.be.revertedWith("Caller is not a owner");
-
-      await expect(
-        depositFactoryContract.connect(owner).withdraw(
-          usdcToken.address,
-          usdValue,
-        )
-      ).to.be.revertedWith("ERC20: transfer amount exceeds balance");
-
-      const maxBalance = await usdcToken.balanceOf(depositFactoryContract.address);
-
-      await expect(
-        depositFactoryContract.connect(owner).withdraw(
-          usdcToken.address,
-          maxBalance,
-        )
-      ).to.be.fulfilled;
-
-      await expect(
-        depositFactoryContract.connect(owner).withdraw(
-          ethers.constants.AddressZero,
-          usdValue,
-        )
-      ).to.be.revertedWith("Address: insufficient balance");
-
-      await expect(
-        depositFactoryContract.connect(owner).withdrawAll(
-          ethers.constants.AddressZero
-        )
-      ).to.be.fulfilled;
-
-      await expect(
-        usdcToken.mint(depositFactoryContract.address, 5 * 10 ** 6) // 5 USDC
-      ).to.be.fulfilled;
-
-      await expect(
-        depositFactoryContract.connect(owner).withdrawAll(
-          usdcToken.address
-        )
-      ).to.be.fulfilled;
-
-      expect(
-        await usdcToken.balanceOf(adminWalletAddress)
-      ).to.be.equal(5 * 10 ** 6);
+        usdcToken.balanceOf(adminWalletAddress)
+      ).to.be.fulfilled
 
       await expect(
         depositFactoryContract.connect(owner).setPlatformFeeMint(
@@ -1547,7 +1540,7 @@ describe("Test multichain minting engine", () => {
           150
         )
       ).to.be.fulfilled;
-    }); 
+    });
 
     it("[Recurring Payment] utils", async () => {
       const subscriptionId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("new_subscription_id"));
@@ -1559,7 +1552,15 @@ describe("Test multichain minting engine", () => {
           vpId,
           clientWalletAddress
         )
-      ).to.be.revertedWith("Cancelled!");
+      ).to.be.revertedWith("RPaymentContract: call is not the validator!");
+
+      await expect(
+        rPaymentContract.connect(validatorRoleAccount).cancelByValidator(
+          subscriptionId,
+          vpId,
+          clientWalletAddress
+        )
+      ).to.be.revertedWith("RPaymentContract: cancelled!");
 
       await expect(
         rPaymentContract.connect(sellerWallet).cancelBySeller(
@@ -1567,7 +1568,7 @@ describe("Test multichain minting engine", () => {
           vpId,
           clientWalletAddress
         )
-      ).to.be.revertedWith("Cancelled!");
+      ).to.be.revertedWith("RPaymentContract: cancelled!");
     });
   });
 });

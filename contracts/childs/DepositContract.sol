@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.17;
+
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
+
+import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";
+import "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 
 import "../library/Domain.sol";
 import {DepositItem} from "../library/Structs.sol";
@@ -14,7 +18,7 @@ import {ChainLinkPriceFeed} from "./PriceFeed.sol";
 
 import "hardhat/console.sol";
 
-contract DepositContract is ReentrancyGuard {
+contract DepositContract is ReentrancyGuard, ERC165, IERC721, IERC721Metadata {
     address private _sellerAddress;
     address[] public tokenAddress;
     uint256 public mintPrice;
@@ -42,12 +46,11 @@ contract DepositContract is ReentrancyGuard {
     mapping(address => bool) public supportedTokenAddress;
 
     mapping(address => uint256[]) private _tokensOfAccounts;
-
     mapping(uint256 => address) private _owners;
-
     mapping(uint256 => string) private _tokenURIs;
-
     string private _baseURI = "";
+    string private _name = "";
+    string private _symbol = "";
 
     struct DepositItemStruct {
         address owner;
@@ -56,6 +59,7 @@ contract DepositContract is ReentrancyGuard {
         uint256 amount;
         address token;
     }
+
     uint256 private _depositItemCounter = 0;
     mapping(uint256 => DepositItemStruct) public _depositItems;
 
@@ -94,7 +98,10 @@ contract DepositContract is ReentrancyGuard {
         address[] memory whiteList_,
         address chainlinkPriceFeedAddress
     ) external {
-        require(!initialized, "Contract is already initialized");
+        require(
+            !initialized,
+            "DepositContract: contract is already initialized"
+        );
 
         currentStage = 0;
         _sellerAddress = sellerAddress;
@@ -137,48 +144,68 @@ contract DepositContract is ReentrancyGuard {
         uint256 usdValue,
         address token
     ) public view returns (uint256) {
-        return ChainLinkPriceFeed(_chainlinkPriceFeedAddress).convertUsdToTokenPrice(usdValue, token);
+        return
+            ChainLinkPriceFeed(_chainlinkPriceFeedAddress)
+                .convertUsdToTokenPrice(usdValue, token);
     }
 
     function mint(
         DepositItem calldata depositItem,
         address token
     ) public payable {
-        require(block.timestamp <= deadline, "The deadline has been exceeded!");
+        require(
+            block.timestamp <= deadline,
+            "DepositContract: the deadline has been exceeded!"
+        );
 
-        require(currentStage != 0, "We have not ready yet!");
+        require(currentStage != 0, "DepositContract: we have not ready yet!");
 
-        require(depositItem.sellerAddress == _sellerAddress, "Invalid seller!");
+        require(
+            depositItem.sellerAddress == _sellerAddress,
+            "DepositContract: invalid seller!"
+        );
 
         require(
             depositItem.mintQuantity >= minMintQuantity &&
                 depositItem.mintQuantity <= maxMintQuantity,
-            "Invalid mint quantity!"
+            "DepositContract: invalid mint quantity!"
         );
 
         require(
             _mintedTokens + depositItem.mintQuantity <= totalSupply,
-            "Exceed total supply!"
+            "DepositContract: exceed total supply!"
         );
 
         if (currentStage == 1) {
-            require(whiteList[msg.sender], "You are not in white list!");
+            require(
+                whiteList[msg.sender],
+                "DepositContract: you are not in white list!"
+            );
             require(
                 depositItem.mintPrice == whiteListMintPrice,
-                "Invalid white list mint price!"
+                "DepositContract: invalid white list mint price!"
             );
         } else {
-            require(depositItem.mintPrice == mintPrice, "Invalid mint price!");
+            require(
+                depositItem.mintPrice == mintPrice,
+                "DepositContract: invalid mint price!"
+            );
         }
 
-        require(supportedTokenAddress[token] == true, "Not supported token!");
+        require(
+            supportedTokenAddress[token] == true,
+            "DepositContract: not supported token!"
+        );
 
         uint256 newPrice = getPrice(depositItem.mintPrice, token);
         uint256 value = newPrice * depositItem.mintQuantity;
 
         if (token == address(0)) {
-            require(msg.value >= value, "Insufficient native token balances");
-            value = msg.value; // ?
+            require(
+                msg.value >= value,
+                "DepositContract: insufficient native token balances"
+            );
+            value = msg.value;
         }
 
         if (token == address(0)) {
@@ -192,6 +219,7 @@ contract DepositContract is ReentrancyGuard {
         }
 
         uint256 currentIndex = ++_depositItemCounter;
+
         DepositItemStruct memory newDepositItem = DepositItemStruct({
             owner: msg.sender,
             deadline: block.timestamp + depositDeadline,
@@ -199,6 +227,7 @@ contract DepositContract is ReentrancyGuard {
             amount: depositItem.mintQuantity,
             token: token
         });
+
         _depositItems[currentIndex] = newDepositItem;
 
         emit Deposit(
@@ -211,11 +240,11 @@ contract DepositContract is ReentrancyGuard {
         );
     }
 
-    modifier onlyPermissioned() {
+    modifier sellerOrFactoryContract() {
         require(
             msg.sender == _sellerAddress ||
                 msg.sender == _factoryContractAddress,
-            "No permission!"
+            "DepositContract: no permission!"
         );
         _;
     }
@@ -223,20 +252,22 @@ contract DepositContract is ReentrancyGuard {
     modifier onlyFactoryContract() {
         require(
             msg.sender == _factoryContractAddress,
-            "Caller is not a factory contract"
+            "DepositContract: caller is not a factory contract"
         );
         _;
     }
 
-    function setReceiveStatus(uint256 depositItemIndex) external onlyFactoryContract {
+    function setReceiveStatus(
+        uint256 depositItemIndex
+    ) external onlyFactoryContract {
         require(
             _isReceived[depositItemIndex] == false,
-            "This deposit item is already received!"
+            "DepositContract: this deposit item is already received!"
         );
 
         require(
             _depositItems[depositItemIndex].owner != address(0),
-            "This deposit item is not exist!"
+            "DepositContract: this deposit item is not exist!"
         );
 
         _isReceived[depositItemIndex] = true;
@@ -271,25 +302,33 @@ contract DepositContract is ReentrancyGuard {
 
         _mintedTokens += _depositItems[depositItemIndex].amount;
 
-        require(_mintedTokens <= totalSupply, "Exceed total supply!");
+        require(
+            _mintedTokens <= totalSupply,
+            "DepositContract: exceed total supply!"
+        );
 
         emit SetReceiveStatus(msg.sender, depositItemIndex);
     }
 
-    function withdrawDeposit(uint256 depositItemIndex) public {
+    modifier onlyBuyer(uint256 depositItemIndex) {
         require(
             _depositItems[depositItemIndex].owner == msg.sender,
-            "Caller is not the owner of this deposit item!"
+            "DepositContract: caller is not the owner of this deposit item!"
+        );
+        _;
+    }
+
+    function withdrawDeposit(
+        uint256 depositItemIndex
+    ) public onlyBuyer(depositItemIndex) {
+        require(
+            _depositItems[depositItemIndex].deadline < block.timestamp,
+            "DepositContract: the deadline has not been exceeded!"
         );
 
         require(
-            _depositItems[depositItemIndex].deadline < block.timestamp,
-            "The deadline has not been exceeded!"
-        );
-        
-        require(
             _isReceived[depositItemIndex] != true,
-            "This deposit item is already received!"
+            "DepositContract: this deposit item is already received!"
         );
 
         uint256 value = _depositItems[depositItemIndex].value;
@@ -314,27 +353,45 @@ contract DepositContract is ReentrancyGuard {
 
     /** ERC-721 FUNCTIONS **/
 
-    function setTokenUri(
+    function setTokenURI(
         uint256 tokenId,
         string memory uri
     ) external onlyFactoryContract {
         _tokenURIs[tokenId] = uri;
     }
 
-    function setBaseUri(string memory baseURI_) external onlyFactoryContract {
+    function setBaseURI(string memory baseURI_) external onlyFactoryContract {
         _baseURI = baseURI_;
     }
 
     function setOwner(
         address owner,
-        uint256 tokenId
+        uint256[] memory tokenIds
     ) external onlyFactoryContract {
-        _owners[tokenId] = owner;
-        _tokensOfAccounts[owner].push(tokenId);
+        for (uint256 i = 0; i < tokenIds.length; i++) {
+            _owners[tokenIds[i]] = owner;
+            _tokensOfAccounts[owner].push(tokenIds[i]);
+        }
     }
 
-    function baseUri() external view returns (string memory) {
+    function baseURI() external view returns (string memory) {
         return _baseURI;
+    }
+
+    function setName(string memory name_) external onlyFactoryContract {
+        _name = name_;
+    }
+
+    function name() public view virtual returns (string memory) {
+        return _name;
+    }
+
+    function setSymbol(string memory symbol_) external onlyFactoryContract {
+        _symbol = symbol_;
+    }
+
+    function symbol() public view virtual returns (string memory) {
+        return _symbol;
     }
 
     function tokenURI(uint256 tokenId) external view returns (string memory) {
@@ -361,66 +418,41 @@ contract DepositContract is ReentrancyGuard {
     ) external onlyFactoryContract {
         require(
             _owners[tokenId] == from,
-            "This account does not have the required tokenId"
+            "DepositContract: this account does not have the required token id"
         );
+
         _owners[tokenId] = to;
+
         for (uint256 i = 0; i < _tokensOfAccounts[from].length; i++) {
             if (_tokensOfAccounts[from][i] == tokenId) {
                 delete _tokensOfAccounts[from][i];
             }
         }
+
         _tokensOfAccounts[to].push(tokenId);
 
         emit Transferred(from, to, tokenId);
     }
 
-    /** WITHDRAW */
+    function safeTransferFrom(
+        address from,
+        address to,
+        uint256 tokenId
+    ) external {
+        require(
+            _owners[tokenId] == from,
+            "DepositContract: this account does not have the required token id"
+        );
 
-    // function withdraw(
-    //     address token,
-    //     uint256 usdValue
-    // ) external onlyFactoryContract {
-    //     uint256 value  = getPrice(usdValue, token);
-
-    //     DepositFactoryContract depositFactoryContract = DepositFactoryContract(
-    //         _factoryContractAddress
-    //     );
-    //     if (token == address(0)) {
-    //         Address.sendValue(
-    //             payable(depositFactoryContract.getAdminWallet()),
-    //             value
-    //         );
-    //     } else {
-    //         IERC20(token).transfer(
-    //             depositFactoryContract.getAdminWallet(),
-    //             value
-    //         );
-    //     }
-    // }
-
-    // function withdrawAll(address token) external onlyFactoryContract {
-    //     DepositFactoryContract depositFactoryContract = DepositFactoryContract(
-    //         _factoryContractAddress
-    //     );
-    //     if (token == address(0)) {
-    //         Address.sendValue(
-    //             payable(depositFactoryContract.getAdminWallet()),
-    //             address(this).balance
-    //         );
-    //     } else {
-    //         IERC20(token).transfer(
-    //             depositFactoryContract.getAdminWallet(),
-    //             IERC20(token).balanceOf(address(this))
-    //         );
-    //     }
-    // }
+        emit Transferred(from, to, tokenId);
+    }
 
     /** UTILS */
 
     function updateSupportToken(
         address supportedTokenAddress_,
         bool isSupported
-    ) public onlyPermissioned {
+    ) public sellerOrFactoryContract {
         supportedTokenAddress[supportedTokenAddress_] = isSupported;
         if (isSupported) {
             tokenAddress.push(supportedTokenAddress_);
@@ -435,42 +467,53 @@ contract DepositContract is ReentrancyGuard {
         }
     }
 
-    function changeMintPrice(uint256 mintPrice_) public onlyPermissioned {
+    function changeMintPrice(
+        uint256 mintPrice_
+    ) public sellerOrFactoryContract {
         mintPrice = mintPrice_;
     }
 
     function changeMinMintQuantity(
         uint256 minMintQuantity_
-    ) public onlyPermissioned {
+    ) public sellerOrFactoryContract {
         minMintQuantity = minMintQuantity_;
     }
 
     function changeMaxMintQuantity(
         uint256 maxMintQuantity_
-    ) public onlyPermissioned {
+    ) public sellerOrFactoryContract {
         maxMintQuantity = maxMintQuantity_;
     }
 
-    function changeDeadline(uint256 deadline_) public onlyPermissioned {
+    function changeDeadline(uint256 deadline_) public sellerOrFactoryContract {
         deadline = deadline_;
     }
 
-    function changeDepositDeadline(uint256 deadline_) public onlyPermissioned {
+    function changeDepositDeadline(
+        uint256 deadline_
+    ) public sellerOrFactoryContract {
         depositDeadline = deadline_;
     }
 
-    function changeTotalSupply(uint256 totalSupply_) public onlyPermissioned {
-        require(totalSupply_ >= _mintedTokens, "Invalid total supply!");
+    function changeTotalSupply(
+        uint256 totalSupply_
+    ) public sellerOrFactoryContract {
+        require(
+            totalSupply_ >= _mintedTokens,
+            "DepositContract: invalid total supply!"
+        );
         totalSupply = totalSupply_;
     }
 
     function changeWhiteListMintPrice(
         uint256 whiteListMintPrice_
-    ) public onlyPermissioned {
+    ) public sellerOrFactoryContract {
         whiteListMintPrice = whiteListMintPrice_;
     }
 
-    function addWhiteList(address[] memory buyers) public onlyPermissioned {
+    function addWhiteList(
+        address[] memory buyers
+    ) public sellerOrFactoryContract {
         if (buyers.length > 0) {
             for (uint256 i = 0; i < buyers.length; i++) {
                 whiteList[buyers[i]] = true;
@@ -478,7 +521,9 @@ contract DepositContract is ReentrancyGuard {
         }
     }
 
-    function removeWhiteList(address[] memory buyers) public onlyPermissioned {
+    function removeWhiteList(
+        address[] memory buyers
+    ) public sellerOrFactoryContract {
         if (buyers.length > 0) {
             for (uint256 i = 0; i < buyers.length; i++) {
                 whiteList[buyers[i]] = false;
@@ -486,7 +531,7 @@ contract DepositContract is ReentrancyGuard {
         }
     }
 
-    function changeStage(uint256 stage) public onlyPermissioned {
+    function changeStage(uint256 stage) public sellerOrFactoryContract {
         currentStage = stage;
     }
 
@@ -510,22 +555,65 @@ contract DepositContract is ReentrancyGuard {
         DepositItemStruct[] memory depositItems = new DepositItemStruct[](
             _depositItemCounter
         );
+
         for (uint256 i = 0; i < _depositItemCounter; i++) {
             depositItems[i] = _depositItems[i + 1];
         }
+
         return depositItems;
     }
 
     function getDepositItemByIndex(
         uint256 depositItemIndex
     ) public view returns (DepositItemStruct memory) {
-        require(depositItemIndex > 0, "Invalid deposit item index");
+        require(
+            depositItemIndex > 0,
+            "DepositContract: invalid deposit item index"
+        );
 
         require(
             depositItemIndex <= _depositItemCounter,
-            "Invalid deposit item index"
+            "DepositContract: invalid deposit item index"
         );
 
         return _depositItems[depositItemIndex];
     }
+
+    function supportsInterface(
+        bytes4 interfaceId
+    ) public view virtual override(ERC165, IERC165) returns (bool) {
+        return
+            interfaceId == type(IERC721).interfaceId ||
+            interfaceId == type(IERC721Metadata).interfaceId ||
+            super.supportsInterface(interfaceId);
+    }
+
+    function safeTransferFrom(
+        address from,
+        address to,
+        uint256 tokenId,
+        bytes calldata data
+    ) external override {}
+
+    function transferFrom(
+        address from,
+        address to,
+        uint256 tokenId
+    ) external override {}
+
+    function approve(address to, uint256 tokenId) external override {}
+
+    function setApprovalForAll(
+        address operator,
+        bool approved
+    ) external override {}
+
+    function getApproved(
+        uint256 tokenId
+    ) external view override returns (address operator) {}
+
+    function isApprovedForAll(
+        address owner,
+        address operator
+    ) external view override returns (bool) {}
 }

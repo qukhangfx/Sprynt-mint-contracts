@@ -11,11 +11,11 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "hardhat/console.sol";
 
 contract RPaymentContract is AccessControl {
-    bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
-    bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
+    bytes32 public constant SPRYNT_OWNER_ROLE = keccak256("OWNER_ROLE");
+    bytes32 public constant SPRYNT_VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
 
     mapping(bytes32 => bool) public vpIds;
-    mapping(bytes32 => address) public ownerOfSubscription;
+    mapping(bytes32 => address) public subscriptionOwner;
 
     mapping(bytes32 => bool) public disabledSubscription;
 
@@ -119,26 +119,39 @@ contract RPaymentContract is AccessControl {
         _factoryContractAddress = factoryContractAddress_;
         _chainlinkPriceFeedAddress = chainLinkPriceFeedAddress_;
 
-        _grantRole(OWNER_ROLE, msg.sender);
+        _grantRole(SPRYNT_OWNER_ROLE, msg.sender);
     }
 
-    modifier onlyOwner() {
+    modifier onlySpryntOwner() {
         require(
-            hasRole(OWNER_ROLE, msg.sender),
-            "Caller is not the owner"
+            hasRole(SPRYNT_OWNER_ROLE, msg.sender),
+            "RPaymentContract: caller is not the owner"
         );
         _;
     }
 
-    function transferOwner(address newOwner) public onlyOwner {
-        _setupRole(OWNER_ROLE, newOwner);
-        _revokeRole(OWNER_ROLE, msg.sender);
+    modifier onlySpryntValidator() {
+        DepositFactoryContract depositFactoryContract = DepositFactoryContract(
+            _factoryContractAddress
+        );
+
+        require(
+            depositFactoryContract.hasRole(SPRYNT_VALIDATOR_ROLE, msg.sender),
+            "RPaymentContract: call is not the validator!"
+        );
+
+        _;
+    }
+
+    function transferOwner(address newOwner) public onlySpryntOwner {
+        _setupRole(SPRYNT_OWNER_ROLE, newOwner);
+        _revokeRole(SPRYNT_OWNER_ROLE, msg.sender);
     }
 
     function updateSupportToken(
         address supportedTokenAddress_,
         bool isSupported
-    ) public onlyOwner {
+    ) public onlySpryntOwner {
         supportedTokenAddress[supportedTokenAddress_] = isSupported;
         if (isSupported) {
             tokenAddress.push(supportedTokenAddress_);
@@ -155,7 +168,7 @@ contract RPaymentContract is AccessControl {
 
     function setFactoryContractAddress(
         address factoryContractAddress_
-    ) public onlyOwner {
+    ) public onlySpryntOwner {
         _factoryContractAddress = factoryContractAddress_;
     }
 
@@ -176,9 +189,9 @@ contract RPaymentContract is AccessControl {
         uint256 usdValue,
         bytes32 vpId
     ) public payable {
-        require(!vpIds[vpId], "Already paid!");
+        require(!vpIds[vpId], "Paylink: already paid!");
 
-        require(supportedTokenAddress[token], "Not supported token!");
+        require(supportedTokenAddress[token], "Paylink: not supported token!");
 
         DepositFactoryContract depositFactoryContract = DepositFactoryContract(
             _factoryContractAddress
@@ -191,8 +204,11 @@ contract RPaymentContract is AccessControl {
         );
 
         if (token == address(0)) {
-            require(msg.value >= value, "Insufficient native token balances");
-            value = msg.value; // ?
+            require(
+                msg.value >= value,
+                "Paylink: insufficient native token balances"
+            );
+            value = msg.value;
 
             if (platformFeePayAmount > 0) {
                 Address.sendValue(
@@ -240,18 +256,12 @@ contract RPaymentContract is AccessControl {
     ) public {
         require(
             setupPayment[seller][subscriptionId].duration == 0,
-            "Already setup!"
-        );
-
-        require(duration > 0, "Duration must be greater than 0!");
-
-        DepositFactoryContract depositFactoryContract = DepositFactoryContract(
-            _factoryContractAddress
+            "RPaymentContract: already setup!"
         );
 
         require(
-            depositFactoryContract.hasRole(VALIDATOR_ROLE, msg.sender),
-            "Call is not the validator!"
+            duration > 0,
+            "RPaymentContract: duration must be greater than 0!"
         );
 
         setupPayment[seller][subscriptionId] = SetupPaymentStruct({
@@ -259,7 +269,7 @@ contract RPaymentContract is AccessControl {
             duration: duration
         });
 
-        ownerOfSubscription[subscriptionId] = seller;
+        subscriptionOwner[subscriptionId] = seller;
 
         emit SetupSubscription(seller, subscriptionId, usdValue);
     }
@@ -271,17 +281,20 @@ contract RPaymentContract is AccessControl {
     ) public {
         require(
             setupPayment[msg.sender][subscriptionId].duration == 0,
-            "Already setup!"
+            "RPaymentContract: already setup!"
         );
 
-        require(duration > 0, "Duration must be greater than 0!");
+        require(
+            duration > 0,
+            "RPaymentContract: duration must be greater than 0!"
+        );
 
         setupPayment[msg.sender][subscriptionId] = SetupPaymentStruct({
             usdValue: usdValue,
             duration: duration
         });
 
-        ownerOfSubscription[subscriptionId] = msg.sender;
+        subscriptionOwner[subscriptionId] = msg.sender;
 
         emit SetupSubscription(msg.sender, subscriptionId, usdValue);
     }
@@ -294,14 +307,14 @@ contract RPaymentContract is AccessControl {
     ) public payable {
         require(
             !disabledSubscription[subscriptionId],
-            "Subscription is disabled!"
+            "RPaymentContract: subscription is disabled!"
         );
 
-        require(!vpIds[vpId], "Already subscribe!");
+        require(!vpIds[vpId], "RPaymentContract: already subscribe!");
 
         require(
             setupPayment[seller][subscriptionId].duration > 0,
-            "Not found!"
+            "RPaymentContract: not setup!"
         );
 
         SetupPaymentStruct memory setupPaymentStruct = setupPayment[seller][
@@ -312,9 +325,15 @@ contract RPaymentContract is AccessControl {
             _factoryContractAddress
         );
 
-        require(token != address(0), "Not supported native token!");
+        require(
+            token != address(0),
+            "RPaymentContract: not supported native token!"
+        );
 
-        require(supportedTokenAddress[token], "Not supported token!");
+        require(
+            supportedTokenAddress[token],
+            "RPaymentContract: not supported token!"
+        );
 
         uint256 value = getPrice(setupPaymentStruct.usdValue, token);
 
@@ -354,9 +373,12 @@ contract RPaymentContract is AccessControl {
     function renew(address buyer, bytes32 vpId) public payable {
         RPaymentStruct memory lastestPayment_ = lastestPayment[buyer][vpId];
 
-        require(lastestPayment_.buyer == buyer, "Not found subscription!");
+        require(
+            lastestPayment_.buyer == buyer,
+            "RPaymentContract: not found subscription!"
+        );
 
-        require(lastestPayment_.renew, "Unsubscribe!");
+        require(lastestPayment_.renew, "RPaymentContract: unsubscribe!");
 
         SetupPaymentStruct memory setupPaymentStruct = setupPayment[
             lastestPayment_.seller
@@ -364,19 +386,25 @@ contract RPaymentContract is AccessControl {
 
         require(
             !disabledSubscription[lastestPayment_.subscriptionId],
-            "Subscription is disabled!"
+            "RPaymentContract: subscription is disabled!"
         );
 
         require(
             block.timestamp - lastestPayment_.timestamp >=
                 setupPaymentStruct.duration,
-            "Not yet time!"
+            "RPaymentContract: not yet time to renew!"
         );
 
         address token = lastestPayment_.token;
 
-        require(token != address(0), "Not supported native token!");
-        require(supportedTokenAddress[token], "Not supported token!");
+        require(
+            token != address(0),
+            "RPaymentContract: not supported native token!"
+        );
+        require(
+            supportedTokenAddress[token],
+            "RPaymentContract: not supported token!"
+        );
 
         DepositFactoryContract depositFactoryContract = DepositFactoryContract(
             _factoryContractAddress
@@ -415,7 +443,7 @@ contract RPaymentContract is AccessControl {
     function unsubscribe(bytes32 vpId) public {
         require(
             lastestPayment[msg.sender][vpId].buyer == msg.sender,
-            "Caller is not the buyer!"
+            "RPaymentContract: caller is not the buyer!"
         );
 
         RPaymentStruct memory lastestPayment_ = lastestPayment[msg.sender][
@@ -441,8 +469,8 @@ contract RPaymentContract is AccessControl {
 
     function disable(bytes32 subscriptionId) public {
         require(
-            ownerOfSubscription[subscriptionId] == msg.sender,
-            "Caller is not the owner!"
+            subscriptionOwner[subscriptionId] == msg.sender,
+            "RPaymentContract: caller is not a seller"
         );
 
         disabledSubscription[subscriptionId] = true;
@@ -457,11 +485,11 @@ contract RPaymentContract is AccessControl {
     ) public {
         RPaymentStruct memory lastestPayment_ = lastestPayment[buyer][vpId];
 
-        require(lastestPayment_.renew, "Cancelled!");
+        require(lastestPayment_.renew, "RPaymentContract: cancelled!");
 
         require(
-            ownerOfSubscription[subscriptionId] == msg.sender,
-            "Caller is not the owner!"
+            subscriptionOwner[subscriptionId] == msg.sender,
+            "RPaymentContract: caller is not a seller"
         );
 
         lastestPayment[buyer][vpId] = RPaymentStruct({
@@ -481,19 +509,10 @@ contract RPaymentContract is AccessControl {
         bytes32 subscriptionId,
         bytes32 vpId,
         address buyer
-    ) public {
+    ) public onlySpryntValidator {
         RPaymentStruct memory lastestPayment_ = lastestPayment[buyer][vpId];
 
-        require(lastestPayment_.renew, "Cancelled!");
-
-        DepositFactoryContract depositFactoryContract = DepositFactoryContract(
-            _factoryContractAddress
-        );
-
-        require(
-            depositFactoryContract.hasRole(VALIDATOR_ROLE, msg.sender),
-            "Caller is not the validator!"
-        );
+        require(lastestPayment_.renew, "RPaymentContract: cancelled!");
 
         lastestPayment[buyer][vpId] = RPaymentStruct({
             seller: lastestPayment_.seller,

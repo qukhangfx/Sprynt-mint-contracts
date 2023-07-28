@@ -520,11 +520,11 @@ export const deployAll = async (taskArgs: any, hre: any) => {
         async function CreateNftContractBySeller() {
             console.log("Create Nft Contract By Seller");
 
-            const tokenUri: string = "https://bafybeidyj2ases25wrcwyisxsbnfo6qe7oe4re5ql77uspoo6d33benknq.ipfs.nftstorage.link/{id}";
+            const tokenURI: string = "https://bafybeidyj2ases25wrcwyisxsbnfo6qe7oe4re5ql77uspoo6d33benknq.ipfs.nftstorage.link/{id}";
 
             const NftContract = await (
                 await receiveFactoryContract
-                    .createNftContractBySeller(tokenUri)
+                    .createNftContractBySeller(tokenURI)
             ).wait();
             console.log("🚀 NftContract:", NftContract);
         }

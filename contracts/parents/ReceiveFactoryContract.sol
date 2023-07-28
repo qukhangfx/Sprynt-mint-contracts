@@ -6,49 +6,34 @@ import {CloneFactory} from "../library/CloneFactory.sol";
 
 import "hardhat/console.sol";
 
-contract ReceiveFactoryContract is
-    CloneFactory,
-    AccessControl
-{
-    bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
-    bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
+contract ReceiveFactoryContract is CloneFactory, AccessControl {
+    bytes32 public constant SPRYNT_VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
+    bytes32 public constant SELLER_ROLE = keccak256("SELLER_ROLE");
 
     event CreatedNftContract(
-        string tokenUri,
+        string tokenURI,
         address seller,
         address nftContractAddress
     );
 
-    event CreatedDepositContract(
-        address sellerAddress,
-        address tokenAddress,
-        uint16 dstChainId,
-        uint256 mintPrice,
-        uint256 whiteListMintPrice,
-        uint256 minMintQuantity,
-        uint256 maxMintQuantity,
-        uint256 totalSupply,
-        uint256 deadline
-    );
-
-    mapping(address => address) public nftContracts; // seller => nftContract address
+    mapping(address => address) public nftContracts;
     address private _masterNftContractAddress;
 
     constructor() {
-        _setupRole(OWNER_ROLE, msg.sender);
+        _setupRole(SELLER_ROLE, msg.sender);
     }
 
     /** NFT CONTRACT **/
-    
+
     function mint(
         address seller,
         address to,
         uint256 amount,
         bytes memory data
-    ) public onlyPermissioned {
+    ) public sellerOrSpryntValidator {
         require(
             nftContracts[seller] != address(0),
-            "Nft contract is not created."
+            "ReceiveFactoryContract: nft contract is not created."
         );
         if (amount == 1) {
             ERC1155Contract(nftContracts[seller]).mintToken(to, data);
@@ -62,28 +47,31 @@ contract ReceiveFactoryContract is
     }
 
     function createNftContractBySeller(
-        string calldata tokenUri,
+        string calldata tokenURI,
         uint256 usdPrice_
     ) external {
         require(
             nftContracts[msg.sender] == address(0),
-            "Already created nft contract."
+            "ReceiveFactoryContract: already created nft contract."
         );
 
         require(
             _masterNftContractAddress != address(0),
-            "Master nft contract address is not set."
+            "ReceiveFactoryContract: master nft contract address is not set."
         );
 
         address clone = createClone(_masterNftContractAddress);
-        ERC1155Contract(clone).init(tokenUri, usdPrice_, address(this));
+
+        ERC1155Contract(clone).init(tokenURI, usdPrice_, address(this));
+
         nftContracts[msg.sender] = clone;
-        emit CreatedNftContract(tokenUri, msg.sender, clone);
+
+        emit CreatedNftContract(tokenURI, msg.sender, clone);
     }
 
     function setMasterNftContractAddress(
         address masterNftContractAddress
-    ) external onlyOwner {
+    ) external onlySeller {
         _masterNftContractAddress = masterNftContractAddress;
     }
 
@@ -96,56 +84,48 @@ contract ReceiveFactoryContract is
     function setName(
         address _nftContractAddress,
         string memory _name
-    ) external onlyPermissioned {
+    ) external sellerOrSpryntValidator {
         ERC1155Contract(_nftContractAddress).setName(_name);
     }
 
     function setSymbol(
         address _nftContractAddress,
         string memory _symbol
-    ) external onlyPermissioned {
+    ) external sellerOrSpryntValidator {
         ERC1155Contract(_nftContractAddress).setSymbol(_symbol);
     }
 
-    function setBaseUri(
+    function setBaseURI(
         address _nftContractAddress,
-        string memory _baseUri
-    ) external onlyPermissioned {
-        ERC1155Contract(_nftContractAddress).setBaseUri(_baseUri);
+        string memory _baseURI
+    ) external sellerOrSpryntValidator {
+        ERC1155Contract(_nftContractAddress).setBaseURI(_baseURI);
     }
 
     /** UTILS */
 
-    modifier onlyPermissioned() {
+    modifier sellerOrSpryntValidator() {
         require(
-            hasRole(OWNER_ROLE, msg.sender) ||
-                hasRole(VALIDATOR_ROLE, msg.sender),
-            "Sender does not have the required role"
+            hasRole(SELLER_ROLE, msg.sender) ||
+                hasRole(SPRYNT_VALIDATOR_ROLE, msg.sender),
+            "ReceiveFactoryContract: sender does not have the required role"
         );
         _;
     }
 
-    modifier onlyOwner() {
+    modifier onlySeller() {
         require(
-            hasRole(OWNER_ROLE, msg.sender),
-            "Caller is not a owner"
+            hasRole(SELLER_ROLE, msg.sender),
+            "ReceiveFactoryContract: caller is not a seller"
         );
         _;
     }
 
-    modifier onlyValidator() {
-        require(
-            hasRole(VALIDATOR_ROLE, msg.sender),
-            "Caller is not a validator"
-        );
-        _;
+    function setupValidatorRole(address account) external onlySeller {
+        _grantRole(SPRYNT_VALIDATOR_ROLE, account);
     }
 
-    function setupValidatorRole(address account) external onlyOwner {
-        _grantRole(VALIDATOR_ROLE, account);
-    }
-
-    function revokeValidatorRole(address account) external onlyOwner {
-        _revokeRole(VALIDATOR_ROLE, account);
+    function revokeValidatorRole(address account) external onlySeller {
+        _revokeRole(SPRYNT_VALIDATOR_ROLE, account);
     }
 }

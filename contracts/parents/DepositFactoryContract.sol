@@ -12,7 +12,6 @@ import {CloneFactory} from "../library/CloneFactory.sol";
 import {DepositItem} from "../library/Structs.sol";
 import {DepositContract} from "../childs/DepositContract.sol";
 import {SimplePay} from "../childs/SimplePay.sol";
-import {ChainLinkPriceFeed} from "../childs/PriceFeed.sol";
 
 import "hardhat/console.sol";
 
@@ -24,8 +23,10 @@ contract DepositFactoryContract is
 {
     using SafeERC20 for IERC20;
 
-    bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
-    bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
+    bytes32 public constant SPRYNT_VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
+    bytes32 public constant SPRYNT_OWNER_ROLE = keccak256("OWNER_ROLE");
+    bytes32 public constant SPRYNT_ADMIN_WALLET_ROLE =
+        keccak256("ADMIN_WALLET_ROLE");
 
     uint96 public platformFeeMint = 0; // 0% platform fee
     uint96 public platformFeePay = 0; // 0% platform fee
@@ -65,40 +66,26 @@ contract DepositFactoryContract is
 
     address public _chainlinkPriceFeedAddress;
 
-    constructor(
-        address owner,
-        address adminWallet_,
-        address depositRoleAccount,
-        address chainlinkPriceFeedAddress_
-    ) {
+    constructor(address owner, address adminWallet_, address validator) {
         adminWallet = adminWallet_;
 
-        _setupRole(OWNER_ROLE, owner);
-        _setupRole(VALIDATOR_ROLE, depositRoleAccount);
-        _setupRole(DEFAULT_ADMIN_ROLE, adminWallet);
-
-        _chainlinkPriceFeedAddress = chainlinkPriceFeedAddress_;
+        _setupRole(SPRYNT_OWNER_ROLE, owner);
+        _setupRole(SPRYNT_VALIDATOR_ROLE, validator);
+        _setupRole(SPRYNT_ADMIN_WALLET_ROLE, adminWallet);
     }
 
-    function _setChainlinkPriceFeedAddress(address chainlinkPriceFeedAddress_)
-        external
-        onlyOwner
-    {
-        _chainlinkPriceFeedAddress = chainlinkPriceFeedAddress_;
+    function setupValidatorRole(address account) external onlySpryntOwner {
+        _grantRole(SPRYNT_VALIDATOR_ROLE, account);
     }
 
-    function setupValidatorRole(address account) external onlyOwner {
-        _grantRole(VALIDATOR_ROLE, account);
+    function revokeValidatorRole(address account) external onlySpryntOwner {
+        _revokeRole(SPRYNT_VALIDATOR_ROLE, account);
     }
 
-    function revokeValidatorRole(address account) external onlyOwner {
-        _revokeRole(VALIDATOR_ROLE, account);
-    }
-
-    function setAdminWallet(address adminWallet_) external onlyOwner {
+    function setAdminWallet(address adminWallet_) external onlySpryntOwner {
         require(
             adminWallet_ != address(0),
-            "Admin wallet address must not be zero address"
+            "DepositFactoryContract: admin wallet address must not be zero address"
         );
 
         adminWallet = adminWallet_;
@@ -106,26 +93,21 @@ contract DepositFactoryContract is
         emit SetAdminWallet(adminWallet_);
     }
 
-    modifier onlyPermissioned() {
+    modifier onlySprynt() {
         _requireNotPaused();
 
         require(
-            hasRole(OWNER_ROLE, msg.sender) ||
-                hasRole(VALIDATOR_ROLE, msg.sender),
-            "Sender does not have the required role"
+            hasRole(SPRYNT_OWNER_ROLE, msg.sender) ||
+                hasRole(SPRYNT_VALIDATOR_ROLE, msg.sender),
+            "DepositFactoryContract: sender does not have the required role"
         );
         _;
     }
 
-    modifier onlyOwner() {
-        require(hasRole(OWNER_ROLE, msg.sender), "Caller is not a owner");
-        _;
-    }
-
-    modifier onlyValidator() {
+    modifier onlySpryntOwner() {
         require(
-            hasRole(VALIDATOR_ROLE, msg.sender),
-            "Caller is not a validator"
+            hasRole(SPRYNT_OWNER_ROLE, msg.sender),
+            "DepositFactoryContract: caller is not a owner"
         );
         _;
     }
@@ -133,12 +115,12 @@ contract DepositFactoryContract is
     modifier isValidPayContract(address seller) {
         require(
             payContracts[seller] != address(0),
-            "Pay contract is not created."
+            "DepositFactoryContract: pay contract is not created."
         );
 
         require(
             _payContracts[payContracts[seller]],
-            "Only pay contracts created by this factory can call the function!"
+            "DepositFactoryContract: only pay contracts created by this factory can call the function!"
         );
 
         _;
@@ -147,12 +129,12 @@ contract DepositFactoryContract is
     modifier isValidDepositContract(address seller) {
         require(
             depositContracts[seller] != address(0),
-            "Deposit contract is not created."
+            "DepositFactoryContract: deposit contract is not created."
         );
 
         require(
             _depositContracts[depositContracts[seller]],
-            "Only deposit contracts created by this factory can call the function!"
+            "DepositFactoryContract: only deposit contracts created by this factory can call the function!"
         );
 
         _;
@@ -162,19 +144,21 @@ contract DepositFactoryContract is
 
     function setMasterPayContractAddress(
         address masterPayContract
-    ) public onlyOwner {
+    ) public onlySpryntOwner {
         _masterPayContract = masterPayContract;
     }
 
-    function setPlatformFeePay(uint96 platformFeePay_) external onlyOwner {
+    function setPlatformFeePay(
+        uint96 platformFeePay_
+    ) external onlySpryntOwner {
         require(
             platformFeePay_ > 0,
-            "platformFeePay must be greater than zero"
+            "DepositFactoryContract: platform fee pay must be greater than zero"
         );
 
         require(
             platformFeePay_ < 10000,
-            "platformFeePay must be less than 100%"
+            "DepositFactoryContract: platform fee pay must be less than 100%"
         );
 
         platformFeePay = platformFeePay_;
@@ -192,15 +176,15 @@ contract DepositFactoryContract is
         address sellerAddress,
         uint256 deadline,
         address chainlinkPriceFeedAddress
-    ) public {
+    ) public onlySprynt {
         require(
             payContracts[sellerAddress] == address(0),
-            "Already created pay contract."
+            "DepositFactoryContract: already created pay contract."
         );
 
         require(
             _masterPayContract != address(0),
-            "Master pay contract address is not set."
+            "DepositFactoryContract: master pay contract address is not set."
         );
 
         address clone = createClone(_masterPayContract);
@@ -219,11 +203,20 @@ contract DepositFactoryContract is
         emit SimplePayContractCreated(address(clone));
     }
 
+    function setPayChainlinkPriceFeedAddress(
+        address seller,
+        address chainlinkPriceFeedAddress
+    ) public onlySprynt isValidPayContract(seller) {
+        SimplePay(payable(payContracts[seller])).setChainlinkPriceFeedAddress(
+            chainlinkPriceFeedAddress
+        );
+    }
+
     function updateSupportTokenOfPayContract(
         address seller,
         address supportedTokenAddress_,
         bool isSupported
-    ) external onlyPermissioned isValidPayContract(seller) {
+    ) external onlySprynt isValidPayContract(seller) {
         SimplePay(payable(payContracts[seller])).updateSupportToken(
             supportedTokenAddress_,
             isSupported
@@ -233,7 +226,7 @@ contract DepositFactoryContract is
     function setPayReceiveStatus(
         address seller,
         bytes32 vpId
-    ) external onlyPermissioned isValidPayContract(seller) {
+    ) external onlySprynt isValidPayContract(seller) {
         SimplePay(payable(payContracts[seller])).setReceiveStatus(vpId);
     }
 
@@ -241,18 +234,20 @@ contract DepositFactoryContract is
 
     function setMasterDepositContractAddress(
         address masterDepositContract
-    ) public onlyOwner {
+    ) public onlySpryntOwner {
         _masterDepositContract = masterDepositContract;
     }
 
-    function setPlatformFeeMint(uint96 platformFeeMint_) external onlyOwner {
+    function setPlatformFeeMint(
+        uint96 platformFeeMint_
+    ) external onlySpryntOwner {
         require(
             platformFeeMint_ > 0,
-            "platformFeeMint must be greater than zero"
+            "DepositFactoryContract: platform fee mint must be greater than zero"
         );
         require(
             platformFeeMint_ < 10000,
-            "platformFeeMint must be less than 100%"
+            "DepositFactoryContract: platform fee mint must be less than 100%"
         );
         platformFeeMint = platformFeeMint_;
         emit SetPlatformFeeMint(platformFeeMint_);
@@ -270,7 +265,7 @@ contract DepositFactoryContract is
         uint256 depositDeadline,
         address[] memory whiteList_,
         address chainlinkPriceFeedAddress
-    ) public {
+    ) public onlySprynt {
         if (depositContracts[sellerAddress] != address(0)) {
             address depositContractAddress = depositContracts[sellerAddress];
 
@@ -296,7 +291,6 @@ contract DepositFactoryContract is
             if (depositContract.deadline() != deadline) {
                 changeDeadline(sellerAddress, deadline);
             }
-
             if (depositContract.depositDeadline() != depositDeadline) {
                 changeDepositDeadline(sellerAddress, depositDeadline);
             }
@@ -314,7 +308,7 @@ contract DepositFactoryContract is
                 }
             }
 
-            setChainlinkPriceFeedAddress(
+            setDepositChainlinkPriceFeedAddress(
                 sellerAddress,
                 chainlinkPriceFeedAddress
             );
@@ -358,10 +352,10 @@ contract DepositFactoryContract is
         }
     }
 
-    function setChainlinkPriceFeedAddress(
+    function setDepositChainlinkPriceFeedAddress(
         address seller,
         address chainlinkPriceFeedAddress
-    ) public onlyPermissioned isValidDepositContract(seller) {
+    ) public onlySprynt isValidDepositContract(seller) {
         DepositContract(payable(depositContracts[seller]))
             .setChainlinkPriceFeedAddress(chainlinkPriceFeedAddress);
     }
@@ -370,7 +364,7 @@ contract DepositFactoryContract is
         address seller,
         address supportedTokenAddress_,
         bool isSupported
-    ) public onlyPermissioned isValidDepositContract(seller) {
+    ) public onlySprynt isValidDepositContract(seller) {
         DepositContract(payable(depositContracts[seller])).updateSupportToken(
             supportedTokenAddress_,
             isSupported
@@ -380,7 +374,7 @@ contract DepositFactoryContract is
     function addWhiteList(
         address seller,
         address[] memory whiteList
-    ) public onlyPermissioned isValidDepositContract(seller) {
+    ) public onlySprynt isValidDepositContract(seller) {
         DepositContract(payable(depositContracts[seller])).addWhiteList(
             whiteList
         );
@@ -389,7 +383,7 @@ contract DepositFactoryContract is
     function removeWhiteList(
         address seller,
         address[] memory whiteList
-    ) public onlyPermissioned isValidDepositContract(seller) {
+    ) public onlySprynt isValidDepositContract(seller) {
         DepositContract(payable(depositContracts[seller])).removeWhiteList(
             whiteList
         );
@@ -398,7 +392,7 @@ contract DepositFactoryContract is
     function changeMintPrice(
         address seller,
         uint256 mintPrice
-    ) public onlyPermissioned isValidDepositContract(seller) {
+    ) public onlySprynt isValidDepositContract(seller) {
         DepositContract(payable(depositContracts[seller])).changeMintPrice(
             mintPrice
         );
@@ -407,7 +401,7 @@ contract DepositFactoryContract is
     function changeWhiteListMintPrice(
         address seller,
         uint256 whiteListMintPrice
-    ) public onlyPermissioned isValidDepositContract(seller) {
+    ) public onlySprynt isValidDepositContract(seller) {
         DepositContract(payable(depositContracts[seller]))
             .changeWhiteListMintPrice(whiteListMintPrice);
     }
@@ -415,7 +409,7 @@ contract DepositFactoryContract is
     function changeMinMintQuantity(
         address seller,
         uint256 minMintQuantity
-    ) public onlyPermissioned isValidDepositContract(seller) {
+    ) public onlySprynt isValidDepositContract(seller) {
         DepositContract(payable(depositContracts[seller]))
             .changeMinMintQuantity(minMintQuantity);
     }
@@ -423,7 +417,7 @@ contract DepositFactoryContract is
     function changeMaxMintQuantity(
         address seller,
         uint256 maxMintQuantity
-    ) public onlyPermissioned isValidDepositContract(seller) {
+    ) public onlySprynt isValidDepositContract(seller) {
         DepositContract(payable(depositContracts[seller]))
             .changeMaxMintQuantity(maxMintQuantity);
     }
@@ -431,7 +425,7 @@ contract DepositFactoryContract is
     function changeDeadline(
         address seller,
         uint256 deadline
-    ) public onlyPermissioned isValidDepositContract(seller) {
+    ) public onlySprynt isValidDepositContract(seller) {
         DepositContract(payable(depositContracts[seller])).changeDeadline(
             deadline
         );
@@ -440,7 +434,7 @@ contract DepositFactoryContract is
     function changeDepositDeadline(
         address seller,
         uint256 depositDeadline
-    ) public onlyPermissioned isValidDepositContract(seller) {
+    ) public onlySprynt isValidDepositContract(seller) {
         DepositContract(payable(depositContracts[seller]))
             .changeDepositDeadline(depositDeadline);
     }
@@ -448,7 +442,7 @@ contract DepositFactoryContract is
     function changeTotalSupply(
         address seller,
         uint256 totalSupply
-    ) public onlyPermissioned isValidDepositContract(seller) {
+    ) public onlySprynt isValidDepositContract(seller) {
         DepositContract(payable(depositContracts[seller])).changeTotalSupply(
             totalSupply
         );
@@ -461,55 +455,61 @@ contract DepositFactoryContract is
     function changeStage(
         address seller,
         uint256 stage
-    ) public onlyPermissioned isValidDepositContract(seller) {
+    ) public onlySprynt isValidDepositContract(seller) {
         DepositContract(payable(depositContracts[seller])).changeStage(stage);
     }
 
     function setReceiveStatus(
         address seller,
         uint256 depositItemIndex
-    ) external onlyPermissioned isValidDepositContract(seller) {
+    ) external onlySprynt isValidDepositContract(seller) {
         DepositContract(payable(depositContracts[seller])).setReceiveStatus(
             depositItemIndex
         );
     }
 
+    function setTokenName(
+        address seller,
+        string memory name
+    ) external onlySprynt isValidDepositContract(seller) {
+        DepositContract(payable(depositContracts[seller])).setName(name);
+    }
+
+    function setTokenSymbol(
+        address seller,
+        string memory symbol
+    ) external onlySprynt isValidDepositContract(seller) {
+        DepositContract(payable(depositContracts[seller])).setSymbol(symbol);
+    }
+
     function setTokenOwner(
         address seller,
         address owner,
-        uint256 tokenId
-    ) external onlyPermissioned isValidDepositContract(seller) {
+        uint256[] memory tokenIds
+    ) external onlySprynt isValidDepositContract(seller) {
         DepositContract(payable(depositContracts[seller])).setOwner(
             owner,
-            tokenId
+            tokenIds
         );
     }
 
-    function setTokenUri(
+    function setTokenURI(
         address seller,
         uint256 tokenId,
         string memory uri
-    ) external onlyPermissioned isValidDepositContract(seller) {
-        DepositContract(payable(depositContracts[seller])).setTokenUri(
+    ) external onlySprynt isValidDepositContract(seller) {
+        DepositContract(payable(depositContracts[seller])).setTokenURI(
             tokenId,
             uri
         );
     }
-
-    // function burnToken(
-    //     address seller,
-    //     address owner,
-    //     uint256 tokenId
-    // ) external onlyPermissioned isValidDepositContract(seller) {
-    //     DepositContract(payable(depositContracts[seller])).burn(owner, tokenId);
-    // }
 
     function transferToken(
         address seller,
         address from,
         address to,
         uint256 tokenId
-    ) external onlyPermissioned isValidDepositContract(seller) {
+    ) external onlySprynt isValidDepositContract(seller) {
         DepositContract(payable(depositContracts[seller])).transfer(
             from,
             to,
@@ -517,11 +517,11 @@ contract DepositFactoryContract is
         );
     }
 
-    function setTokenBaseUri(
+    function setTokenBaseURI(
         address seller,
-        string memory baseUri
-    ) external onlyPermissioned isValidDepositContract(seller) {
-        DepositContract(payable(depositContracts[seller])).setBaseUri(baseUri);
+        string memory baseURI
+    ) external onlySprynt isValidDepositContract(seller) {
+        DepositContract(payable(depositContracts[seller])).setBaseURI(baseURI);
     }
 
     /** UTILS **/
@@ -538,40 +538,19 @@ contract DepositFactoryContract is
         return adminWallet;
     }
 
-    function withdraw(address token, uint256 usdValue) external onlyOwner {
-        uint256 value = getPrice(usdValue, token);
-
-        if (token == address(0)) {
-            Address.sendValue(payable(adminWallet), value);
-        } else {
-            IERC20(token).transfer(adminWallet, value);
-        }
-    }
-
-    function withdrawAll(address token) external onlyOwner {
-        if (token == address(0)) {
-            Address.sendValue(payable(adminWallet), address(this).balance);
-        } else {
-            IERC20(token).transfer(
-                adminWallet,
-                IERC20(token).balanceOf(address(this))
-            );
-        }
-    }
-
-    modifier onlyAdmin() {
+    modifier onlyAdminWallet() {
         require(
-            hasRole(DEFAULT_ADMIN_ROLE, msg.sender),
-            "Caller is not the admin"
+            hasRole(SPRYNT_ADMIN_WALLET_ROLE, msg.sender),
+            "DepositFactoryContract: caller is not the admin wallet"
         );
         _;
     }
 
-    function pause() public virtual onlyAdmin {
+    function pause() public virtual onlyAdminWallet {
         _pause();
     }
 
-    function unpause() public virtual onlyAdmin {
+    function unpause() public virtual onlyAdminWallet {
         _unpause();
     }
 
@@ -590,12 +569,5 @@ contract DepositFactoryContract is
         unchecked {
             return (amount * fee) / 10000;
         }
-    }
-
-    function getPrice(
-        uint256 usdValue,
-        address token
-    ) public view returns (uint256) {
-        return ChainLinkPriceFeed(_chainlinkPriceFeedAddress).convertUsdToTokenPrice(usdValue, token);
     }
 }

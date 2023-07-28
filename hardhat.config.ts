@@ -205,13 +205,13 @@ const config = {
     compilers: [
       {
         version: "0.8.17",
-        settings: {
-          // optimizer: {
-          //   enabled: false,
-          //   runs: 100,
-          // },
-          // viaIR: true,
-        },
+        // settings: {
+        //   optimizer: {
+        //     enabled: true,
+        //     runs: 100,
+        //   },
+        //   viaIR: true,
+        // },
       },
     ],
   },

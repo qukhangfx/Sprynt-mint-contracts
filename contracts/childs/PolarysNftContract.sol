@@ -16,11 +16,11 @@ contract PolarysNftContract is IPolarysNftContract, ERC721A, AccessControl, Reen
   constructor(
     string memory name, 
     string memory symbol,
-    string memory tokenUri,
+    string memory tokenURI,
     uint256 maxSupply,
     address factoryContractAddress
   ) ERC721A(name, symbol) {
-    baseURI = tokenUri;
+    baseURI = tokenURI;
     MAX_SUPPLY = maxSupply;
     _grantRole(FACTORY_CONTRACT_ROLE, factoryContractAddress);
   }
