@@ -851,34 +851,22 @@ describe("Test multichain minting engine", () => {
       expect(await simplePayContract.allowances(usdcToken.address)).to.be.equal(price);
 
       await expect(
-        simplePayContract.connect(clientWallet).withdrawFund(usdcToken.address, usdValue)
+        simplePayContract.connect(clientWallet).withdrawFund(usdcToken.address)
       ).to.be.revertedWith("Caller is not an owner");
 
       await expect(
-        simplePayContract.connect(sellerWallet).withdrawFund(usdcToken.address, usdValue + 10 ** 2)
-      ).to.be.revertedWith("Insufficient fund");
-
-      await expect(
-        simplePayContract.connect(sellerWallet).withdrawFund(usdcToken.address, usdValue / 2)
+        simplePayContract.connect(sellerWallet).withdrawFund(usdcToken.address)
       ).to.be.fulfilled;
 
-      expect(await simplePayContract.allowances(usdcToken.address)).to.be.equal(price / 2);
+      expect(await simplePayContract.allowances(usdcToken.address)).to.be.equal(0);
 
       expect(await simplePayContract.allowances(ethers.constants.AddressZero)).to.be.equal(533746609774971);
 
       await expect(
-        simplePayContract.connect(sellerWallet).withdrawFund(ethers.constants.AddressZero, 0.5 * 10 ** USD_DECIMALS)
+        simplePayContract.connect(sellerWallet).withdrawFund(ethers.constants.AddressZero)
       ).to.be.fulfilled;
 
-      expect(await simplePayContract.allowances(ethers.constants.AddressZero)).to.be.equal(266873304887486);
-
-      await expect(
-        simplePayContract.connect(sellerWallet).withdrawFund(ethers.constants.AddressZero, 2 * 10 ** USD_DECIMALS)
-      ).to.be.revertedWith("Insufficient fund");
-
-      await expect(
-        simplePayContract.connect(sellerWallet).withdrawFund(usdcToken.address, 2 * 10 ** USD_DECIMALS)
-      ).to.be.revertedWith("Insufficient fund");
+      expect(await simplePayContract.allowances(ethers.constants.AddressZero)).to.be.equal(0);
     });
 
     it("[Simple Pay] buyer - refund", async () => {

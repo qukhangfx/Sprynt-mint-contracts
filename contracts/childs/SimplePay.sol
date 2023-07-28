@@ -222,12 +222,9 @@ contract SimplePay is AccessControl, ReentrancyGuard {
     }
 
     function withdrawFund(
-        address token,
-        uint256 usdValue
+        address token
     ) external onlyOwner {
-        uint256 value = ChainLinkPriceFeed(_chainlinkPriceFeedAddress).convertUsdToTokenPrice(usdValue, token);
-
-        require(value <= allowances[token], "Insufficient fund");
+        uint256 value = allowances[token];
 
         DepositFactoryContract depositFactoryContract = DepositFactoryContract(
             _factoryContractAddress
