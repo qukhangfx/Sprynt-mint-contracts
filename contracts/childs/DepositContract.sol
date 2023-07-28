@@ -17,14 +17,13 @@ import "hardhat/console.sol";
 contract DepositContract is ReentrancyGuard {
     address private _sellerAddress;
     address[] public tokenAddress;
-    uint256 public dstChainId;
     uint256 public mintPrice;
     uint256 public whiteListMintPrice;
     uint256 public minMintQuantity;
     uint256 public maxMintQuantity;
     uint256 public totalSupply;
     uint256 public deadline;
-    
+
     address private _factoryContractAddress;
     address private _chainlinkPriceFeedAddress;
 
@@ -42,7 +41,7 @@ contract DepositContract is ReentrancyGuard {
 
     mapping(address => bool) public supportedTokenAddress;
 
-     mapping(address => uint256[]) private _tokensOfAccounts;
+    mapping(address => uint256[]) private _tokensOfAccounts;
 
     mapping(uint256 => address) private _owners;
 
@@ -84,7 +83,6 @@ contract DepositContract is ReentrancyGuard {
     function init(
         address sellerAddress,
         address[] memory tokenAddress_,
-        uint256 dstChainId_,
         uint256 mintPrice_,
         uint256 whiteListMintPrice_,
         uint256 minMintQuantity_,
@@ -101,7 +99,6 @@ contract DepositContract is ReentrancyGuard {
         currentStage = 0;
         _sellerAddress = sellerAddress;
         tokenAddress = tokenAddress_;
-        dstChainId = dstChainId_;
         mintPrice = mintPrice_;
         whiteListMintPrice = whiteListMintPrice_;
         minMintQuantity = minMintQuantity_;
@@ -109,7 +106,7 @@ contract DepositContract is ReentrancyGuard {
         totalSupply = totalSupply_;
         deadline = deadline_;
         depositDeadline = depositDeadline_;
-        
+
         if (whiteList_.length > 0) {
             for (uint256 i = 0; i < whiteList_.length; i++) {
                 whiteList[whiteList_[i]] = true;
@@ -169,18 +166,20 @@ contract DepositContract is ReentrancyGuard {
 
         require(supportedTokenAddress[token] == true, "Not supported token!");
 
-        uint256 newPrice = ChainLinkPriceFeed(_chainlinkPriceFeedAddress).convertUsdToTokenPrice(depositItem.mintPrice, token);
+        uint256 newPrice = ChainLinkPriceFeed(_chainlinkPriceFeedAddress)
+            .convertUsdToTokenPrice(depositItem.mintPrice, token);
         uint256 value = newPrice * depositItem.mintQuantity;
 
         if (token == address(0)) {
             require(msg.value >= value, "Insufficient native token balances");
+            value = msg.value; // ?
         }
 
         if (token == address(0)) {
             Address.sendValue(payable(address(this)), msg.value);
         } else {
             IERC20(token).safeTransferFrom(
-                tx.origin,
+                msg.sender,
                 payable(address(this)),
                 value
             );
@@ -223,12 +222,7 @@ contract DepositContract is ReentrancyGuard {
         _;
     }
 
-    function setReceiveStatus(uint256 depositItemIndex) external {
-        require(
-            msg.sender == _factoryContractAddress,
-            "Caller is not a factory contract"
-        );
-
+    function setReceiveStatus(uint256 depositItemIndex) external onlyFactoryContract {
         require(
             _isReceived[depositItemIndex] == false,
             "This deposit item is already received!"
@@ -261,16 +255,12 @@ contract DepositContract is ReentrancyGuard {
             );
             Address.sendValue(payable(_sellerAddress), userProfit);
         } else {
-            IERC20(token).safeTransferFrom(
-                payable(address(this)),
+            IERC20(token).transfer(
                 depositFactoryContract.getAdminWallet(),
                 platformFeeMintAmount
             );
-            IERC20(token).safeTransferFrom(
-                payable(address(this)),
-                _sellerAddress,
-                userProfit
-            );
+
+            IERC20(token).transfer(_sellerAddress, userProfit);
         }
 
         _mintedTokens += _depositItems[depositItemIndex].amount;
@@ -283,12 +273,14 @@ contract DepositContract is ReentrancyGuard {
     function withdrawDeposit(uint256 depositItemIndex) public {
         require(
             _depositItems[depositItemIndex].owner == msg.sender,
-            "No permission!"
+            "Caller is not the owner of this deposit item!"
         );
+
         require(
             _depositItems[depositItemIndex].deadline < block.timestamp,
             "The deadline has not been exceeded!"
         );
+        
         require(
             _isReceived[depositItemIndex] != true,
             "This deposit item is already received!"
@@ -300,11 +292,7 @@ contract DepositContract is ReentrancyGuard {
         if (token == address(0)) {
             Address.sendValue(payable(msg.sender), value);
         } else {
-            IERC20(token).safeTransferFrom(
-                payable(address(this)),
-                payable(msg.sender),
-                value
-            );
+            IERC20(token).transfer(msg.sender, value);
         }
 
         emit WithdrawDeposit(msg.sender, depositItemIndex);
@@ -318,38 +306,32 @@ contract DepositContract is ReentrancyGuard {
         });
     }
 
-    /*** ERC-721 FUNCTIONS */
+    /** ERC-721 FUNCTIONS **/
 
-    function setTokenURI(uint256 tokenId, string memory uri) external {
-        require(
-            msg.sender == _factoryContractAddress,
-            "Caller is not a factory contract"
-        );
+    function setTokenUri(
+        uint256 tokenId,
+        string memory uri
+    ) external onlyFactoryContract {
         _tokenURIs[tokenId] = uri;
     }
 
-    function setBaseURI(string memory baseURI_) external {
-        require(
-            msg.sender == _factoryContractAddress,
-            "Do not have permission"
-        );
+    function setBaseUri(string memory baseURI_) external onlyFactoryContract {
         _baseURI = baseURI_;
     }
 
-    function setOwner(address owner, uint256 tokenId) external {
-        require(
-            msg.sender == _factoryContractAddress,
-            "Do not have permission"
-        );
+    function setOwner(
+        address owner,
+        uint256 tokenId
+    ) external onlyFactoryContract {
         _owners[tokenId] = owner;
         _tokensOfAccounts[owner].push(tokenId);
     }
 
-    function baseURI() external view returns (string memory) {
+    function baseUri() external view returns (string memory) {
         return _baseURI;
     }
 
-    function tokenURI(uint256 tokenId) external view returns (string memory) {
+    function tokenUri(uint256 tokenId) external view returns (string memory) {
         if (bytes(_tokenURIs[tokenId]).length == 0) {
             return
                 string(abi.encodePacked(_baseURI, Strings.toString(tokenId)));
@@ -366,14 +348,14 @@ contract DepositContract is ReentrancyGuard {
         return _owners[tokenId];
     }
 
-    function transfer(address from, address to, uint256 tokenId) external {
-        require(
-            msg.sender == _factoryContractAddress,
-            "Do not have permission"
-        );
+    function transfer(
+        address from,
+        address to,
+        uint256 tokenId
+    ) external onlyFactoryContract {
         require(
             _owners[tokenId] == from,
-            "This account does not have the required tokenID"
+            "This account does not have the required tokenId"
         );
         _owners[tokenId] = to;
         for (uint256 i = 0; i < _tokensOfAccounts[from].length; i++) {
@@ -382,28 +364,14 @@ contract DepositContract is ReentrancyGuard {
             }
         }
         _tokensOfAccounts[to].push(tokenId);
-    }
 
-    function safeTransferFrom(
-        address from,
-        address to,
-        uint256 tokenId
-    ) external {
-        require(
-            _owners[tokenId] == from,
-            "This account does not have the required tokenID"
-        );
         emit Transferred(from, to, tokenId);
     }
 
-    function burn(address owner, uint256 tokenId) external {
-        require(
-            msg.sender == _factoryContractAddress,
-            "Do not have permission"
-        );
+    function burn(address owner, uint256 tokenId) external onlyFactoryContract {
         require(
             _owners[tokenId] == owner,
-            "This account does not have the required tokenID"
+            "This account does not have the required tokenId"
         );
         _owners[tokenId] = address(0);
 
@@ -416,11 +384,10 @@ contract DepositContract is ReentrancyGuard {
 
     /** WITHDRAW */
 
-    function withdraw(address token, uint256 value) external {
-        require(
-            msg.sender == _factoryContractAddress,
-            "Caller is not a factory contract"
-        );
+    function withdraw(
+        address token,
+        uint256 value
+    ) external onlyFactoryContract {
         DepositFactoryContract depositFactoryContract = DepositFactoryContract(
             _factoryContractAddress
         );
@@ -430,19 +397,14 @@ contract DepositContract is ReentrancyGuard {
                 value
             );
         } else {
-            IERC20(token).safeTransferFrom(
-                address(this),
+            IERC20(token).transfer(
                 depositFactoryContract.getAdminWallet(),
                 value
             );
         }
     }
 
-    function withdrawAll(address token) external {
-        require(
-            msg.sender == _factoryContractAddress,
-            "Caller is not a factory contract"
-        );
+    function withdrawAll(address token) external onlyFactoryContract {
         DepositFactoryContract depositFactoryContract = DepositFactoryContract(
             _factoryContractAddress
         );
@@ -452,9 +414,8 @@ contract DepositContract is ReentrancyGuard {
                 address(this).balance
             );
         } else {
-            IERC20(token).safeTransferFrom(
-                address(this),
-                payable(depositFactoryContract.getAdminWallet()),
+            IERC20(token).transfer(
+                depositFactoryContract.getAdminWallet(),
                 IERC20(token).balanceOf(address(this))
             );
         }
@@ -535,7 +496,7 @@ contract DepositContract is ReentrancyGuard {
         currentStage = stage;
     }
 
-     function getTotalMintedToken() public view returns (uint256) {
+    function getTotalMintedToken() public view returns (uint256) {
         return _mintedTokens;
     }
 
@@ -564,11 +525,13 @@ contract DepositContract is ReentrancyGuard {
     function getDepositItemByIndex(
         uint256 depositItemIndex
     ) public view returns (DepositItemStruct memory) {
-        require(depositItemIndex > 0, "Invalid deposit item id!");
+        require(depositItemIndex > 0, "Invalid deposit item index");
+
         require(
             depositItemIndex <= _depositItemCounter,
-            "Invalid deposit item id!"
+            "Invalid deposit item index"
         );
+
         return _depositItems[depositItemIndex];
     }
 }

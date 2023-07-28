@@ -10,7 +10,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard, Ownable {
     bytes32 public constant FACTORY_CONTRACT_ROLE = keccak256("FACTORY_CONTRACT_ROLE");
 
-    string private baseURI;
+    string private baseUri;
     string public name;
     string public symbol;
 
@@ -24,18 +24,19 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard, Ownable {
     constructor() ERC1155("") {}
 
     function init(
-        string memory tokenURI,
+        string memory tokenUri,
         uint256 usdPrice_,
         address factoryContractAddress
     ) external {
         require(!initialized, "Contract is already initialized");
 
         usdPrice = usdPrice_; // For easily getting the price of the NFT when create new deposit contract
-        baseURI = tokenURI;
+        baseUri = tokenUri;
+        
         _factoryContractAddress = factoryContractAddress;
-
         _grantRole(FACTORY_CONTRACT_ROLE, factoryContractAddress);
-        _setURI(tokenURI);
+
+        _setURI(tokenUri);
 
         name = "";
         symbol = "";
@@ -45,8 +46,8 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard, Ownable {
         initialized = true;
     }
 
-    function setBaseURI(string calldata _uri) external onlyPermissioned {
-        baseURI = _uri;
+    function setBaseUri(string calldata _uri) external onlyPermissioned {
+        baseUri = _uri;
         _setURI(_uri);
     }
 
@@ -58,8 +59,8 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard, Ownable {
         symbol = _symbol;
     }
 
-    function getBaseURI() external view returns (string memory) {
-        return baseURI;
+    function getBaseUri() external view returns (string memory) {
+        return baseUri;
     }
 
     function setFactoryContractAddress(
@@ -67,15 +68,15 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard, Ownable {
     ) external onlyOwner {
         require(
             factoryContractAddress != address(0),
-            "contract address must not be zero address"
+            "Contract address must not be zero address"
         );
+
         _grantRole(FACTORY_CONTRACT_ROLE, factoryContractAddress);
     }
 
     modifier onlyPermissioned() {
         require(
-            owner() == _msgSender() ||
-                hasRole(FACTORY_CONTRACT_ROLE, msg.sender),
+            owner() == _msgSender() || hasRole(FACTORY_CONTRACT_ROLE, msg.sender),
             "Sender does not have the required role"
         );
         _;
@@ -111,7 +112,7 @@ contract ERC1155Contract is ERC1155, AccessControl, ReentrancyGuard, Ownable {
     function uri(uint256 tokenId) public view override returns (string memory) {
         return
             string(
-                abi.encodePacked(this.getBaseURI(), Strings.toString(tokenId))
+                abi.encodePacked(this.getBaseUri(), Strings.toString(tokenId))
             );
     }
 

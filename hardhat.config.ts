@@ -62,6 +62,8 @@ const MAIN_FANTOM_RPC_URL = process.env.MAIN_FANTOM_RPC_URL;
 const MAIN_ARBITRUM_RPC_URL = process.env.MAIN_ARBITRUM_RPC_URL;
 const MAIN_METIS_RPC_URL = process.env.MAIN_METIS_RPC_URL;
 
+const COIN_MARKET_CAP_KEY = process.env.COIN_MARKET_CAP_KEY || "";
+
 const config = {
   defaultNetwork: "hardhat",
   networks: {
@@ -208,7 +210,7 @@ const config = {
             enabled: true,
             runs: 100,
           },
-          viaIR: true,
+          // viaIR: true,
         },
       },
     ],
@@ -217,8 +219,10 @@ const config = {
     timeout: 30000,
   },
   gasReporter: {
-    enabled: process.env.REPORT_GAS !== undefined,
+    coinmarketcap: COIN_MARKET_CAP_KEY,
+    enabled: true,
     currency: "USD",
+    showTimeSpent: true,
   },
   contractSizer: {
     alphaSort: true,
@@ -227,9 +231,7 @@ const config = {
     strict: true,
   },
   dependencyCompiler: {
-    paths: [
-      "@layerzerolabs/solidity-examples/contracts/mocks/LZEndpointMock.sol",
-    ],
+    paths: [],
   },
 };
 

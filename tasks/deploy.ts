@@ -68,7 +68,6 @@ export const deployAll = async (taskArgs: any, hre: any) => {
             const depositFactoryContractInstance = await depositFactoryContract
                 .connect(signer)
                 .deploy(
-                    layerzeroConfig[mintChain].lzEndpoint, // _layerZeroEndpoint
                     signer.address,  // owner
                     signer.address, // adminWallet_
                     signer.address,// depositRoleAccount
@@ -98,9 +97,7 @@ export const deployAll = async (taskArgs: any, hre: any) => {
 
             const receiveFactoryContractInstance = await receiveFactoryContract
                 .connect(signer)
-                .deploy(
-                    layerzeroConfig[mintChain].lzEndpoint,
-                );
+                .deploy();
             await receiveFactoryContractInstance.deployed();
 
             if (!ContractAddresses["ReceiveFactoryContract"]) {
@@ -244,7 +241,6 @@ export const deployAll = async (taskArgs: any, hre: any) => {
     //             await hre.run("verify:verify", {
     //                 address: depositFactoryContract.address,
     //                 constructorArguments: [
-    //                     layerzeroConfig[mintChain].lzEndpoint,
     //                     signer.address,
     //                     signer.address,
     //                     signer.address,
@@ -264,9 +260,7 @@ export const deployAll = async (taskArgs: any, hre: any) => {
     //         try {
     //             await hre.run("verify:verify", {
     //                 address: receiveFactoryContract.address,
-    //                 constructorArguments: [
-    //                     layerzeroConfig[mintChain].lzEndpoint,
-    //                 ],
+    //                 constructorArguments: [],
     //             });
     //         } catch (error) {
     //             console.log("Error verifying ReceiveFactoryContract")

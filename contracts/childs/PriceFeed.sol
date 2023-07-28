@@ -54,16 +54,24 @@ contract ChainLinkPriceFeed is AccessControl {
     mapping(string => address) private _priceFeedAddress;
 
     address public _nativeTokenPriceFeedAddress;
+    address public owner;
 
-    constructor(
-        address nativeTokenPriceFeedAddress
-    ) {
+    constructor(address nativeTokenPriceFeedAddress) {
         _setupRole(OWNER_ROLE, msg.sender);
+        owner = msg.sender;
 
         _nativeTokenPriceFeedAddress = nativeTokenPriceFeedAddress;
     }
 
-    function transferOwner(address newOwner) public onlyRole(OWNER_ROLE) {
+    modifier onlyOwner() {
+        require(
+            hasRole(OWNER_ROLE, msg.sender),
+            "PriceFeed: caller is not the owner"
+        );
+        _;
+    }
+
+    function transferOwner(address newOwner) public onlyOwner {
         _setupRole(OWNER_ROLE, newOwner);
         _revokeRole(OWNER_ROLE, msg.sender);
     }
@@ -71,14 +79,17 @@ contract ChainLinkPriceFeed is AccessControl {
     function setPriceFeedAddress(
         string memory symbol,
         address priceFeed
-    ) external onlyRole(OWNER_ROLE) {
+    ) external onlyOwner {
         _priceFeedAddress[symbol] = priceFeed;
     }
 
     function getPriceFeedAddress(
         string memory symbol
     ) public view returns (address) {
-        require(_priceFeedAddress[symbol] != address(0), "PriceFeed: invalid symbol");
+        require(
+            _priceFeedAddress[symbol] != address(0),
+            "PriceFeed: not supported token!"
+        );
         return _priceFeedAddress[symbol];
     }
 
@@ -96,13 +107,23 @@ contract ChainLinkPriceFeed is AccessControl {
         address tokenAddress
     ) public view returns (uint256) {
         if (tokenAddress == address(0)) {
-            (, uint256 usdValueToNativeToken) = _convertUsdToTokenPrice(usdValue, _nativeTokenPriceFeedAddress, 18);
+            (, uint256 usdValueToNativeToken) = _convertUsdToTokenPrice(
+                usdValue,
+                _nativeTokenPriceFeedAddress,
+                18
+            );
             return usdValueToNativeToken;
         }
-        
-        (string memory tokenSymbol, uint8 tokenDecimals) = getTokenInfo(tokenAddress);
+
+        (string memory tokenSymbol, uint8 tokenDecimals) = getTokenInfo(
+            tokenAddress
+        );
         address priceFeedAddress = getPriceFeedAddress(tokenSymbol);
-        (, uint256 usdValueToTokenAmount) = _convertUsdToTokenPrice(usdValue, priceFeedAddress, tokenDecimals);
+        (, uint256 usdValueToTokenAmount) = _convertUsdToTokenPrice(
+            usdValue,
+            priceFeedAddress,
+            tokenDecimals
+        );
         return usdValueToTokenAmount;
     }
 
@@ -124,7 +145,8 @@ contract ChainLinkPriceFeed is AccessControl {
         );
 
         uint256 tokenPrice = priceFeed.getData();
-        uint256 usdValueToTokenAmount = (usdValue * 10 ** tokenDecimals) / tokenPrice;
+        uint256 usdValueToTokenAmount = (usdValue * 10 ** tokenDecimals) /
+            tokenPrice;
 
         return (tokenPrice, usdValueToTokenAmount);
     }

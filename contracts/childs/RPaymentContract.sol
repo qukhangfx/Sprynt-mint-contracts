@@ -112,17 +112,25 @@ contract RPaymentContract is AccessControl {
     ) {
         tokenAddress = tokenAddress_;
 
-         for (uint256 i = 0; i < tokenAddress_.length; i++) {
+        for (uint256 i = 0; i < tokenAddress_.length; i++) {
             supportedTokenAddress[tokenAddress_[i]] = true;
         }
 
         _factoryContractAddress = factoryContractAddress_;
         _chainlinkPriceFeedAddress = chainLinkPriceFeedAddress_;
-        
+
         _grantRole(OWNER_ROLE, msg.sender);
     }
 
-    function transferOwner(address newOwner) public onlyRole(OWNER_ROLE) {
+    modifier onlyOwner() {
+        require(
+            hasRole(OWNER_ROLE, msg.sender),
+            "Caller is not the owner"
+        );
+        _;
+    }
+
+    function transferOwner(address newOwner) public onlyOwner {
         _setupRole(OWNER_ROLE, newOwner);
         _revokeRole(OWNER_ROLE, msg.sender);
     }
@@ -130,7 +138,7 @@ contract RPaymentContract is AccessControl {
     function updateSupportToken(
         address supportedTokenAddress_,
         bool isSupported
-    ) public onlyRole(OWNER_ROLE) {
+    ) public onlyOwner {
         supportedTokenAddress[supportedTokenAddress_] = isSupported;
         if (isSupported) {
             tokenAddress.push(supportedTokenAddress_);
@@ -147,7 +155,7 @@ contract RPaymentContract is AccessControl {
 
     function setFactoryContractAddress(
         address factoryContractAddress_
-    ) public onlyRole(OWNER_ROLE) {
+    ) public onlyOwner {
         _factoryContractAddress = factoryContractAddress_;
     }
 
@@ -155,7 +163,9 @@ contract RPaymentContract is AccessControl {
         uint256 usdValue,
         address token
     ) public view returns (uint256) {
-        return ChainLinkPriceFeed(_chainlinkPriceFeedAddress).convertUsdToTokenPrice(usdValue, token);
+        return
+            ChainLinkPriceFeed(_chainlinkPriceFeedAddress)
+                .convertUsdToTokenPrice(usdValue, token);
     }
 
     /** PAY LINK **/
@@ -170,7 +180,7 @@ contract RPaymentContract is AccessControl {
 
         require(supportedTokenAddress[token], "Not supported token!");
 
-         DepositFactoryContract depositFactoryContract = DepositFactoryContract(
+        DepositFactoryContract depositFactoryContract = DepositFactoryContract(
             _factoryContractAddress
         );
 
@@ -182,19 +192,24 @@ contract RPaymentContract is AccessControl {
 
         if (token == address(0)) {
             require(msg.value >= value, "Insufficient native token balances");
+            value = msg.value; // ?
 
-            Address.sendValue(
-                payable(depositFactoryContract.getAdminWallet()),
-                platformFeePayAmount
-            );
+            if (platformFeePayAmount > 0) {
+                Address.sendValue(
+                    payable(depositFactoryContract.getAdminWallet()),
+                    platformFeePayAmount
+                );
+            }
 
             Address.sendValue(payable(seller), value - platformFeePayAmount);
         } else {
-            IERC20(token).safeTransferFrom(
-                msg.sender,
-                depositFactoryContract.getAdminWallet(),
-                platformFeePayAmount
-            );
+            if (platformFeePayAmount > 0) {
+                IERC20(token).safeTransferFrom(
+                    msg.sender,
+                    depositFactoryContract.getAdminWallet(),
+                    platformFeePayAmount
+                );
+            }
 
             IERC20(token).safeTransferFrom(
                 msg.sender,
@@ -297,10 +312,7 @@ contract RPaymentContract is AccessControl {
             _factoryContractAddress
         );
 
-        require(
-            token != address(0),
-            "Not supported native token!"
-        );
+        require(token != address(0), "Not supported native token!");
 
         require(supportedTokenAddress[token], "Not supported token!");
 
@@ -310,11 +322,14 @@ contract RPaymentContract is AccessControl {
             value
         );
 
-        IERC20(token).safeTransferFrom(
-            msg.sender,
-            depositFactoryContract.getAdminWallet(),
-            platformFeePayAmount
-        );
+        if (platformFeePayAmount > 0) {
+            IERC20(token).safeTransferFrom(
+                msg.sender,
+                depositFactoryContract.getAdminWallet(),
+                platformFeePayAmount
+            );
+        }
+
         IERC20(token).safeTransferFrom(
             msg.sender,
             seller,
@@ -333,13 +348,7 @@ contract RPaymentContract is AccessControl {
 
         vpIds[vpId] = true;
 
-        emit RPaymentSubscribe(
-            seller,
-            msg.sender,
-            subscriptionId,
-            vpId,
-            value
-        );
+        emit RPaymentSubscribe(seller, msg.sender, subscriptionId, vpId, value);
     }
 
     function renew(address buyer, bytes32 vpId) public payable {
@@ -377,11 +386,13 @@ contract RPaymentContract is AccessControl {
             lastestPayment_.value
         );
 
-        IERC20(token).safeTransferFrom(
-            buyer,
-            depositFactoryContract.getAdminWallet(),
-            platformFeePayAmount
-        );
+        if (platformFeePayAmount > 0) {
+            IERC20(token).safeTransferFrom(
+                buyer,
+                depositFactoryContract.getAdminWallet(),
+                platformFeePayAmount
+            );
+        }
 
         IERC20(token).safeTransferFrom(
             buyer,
@@ -450,7 +461,7 @@ contract RPaymentContract is AccessControl {
 
         require(
             ownerOfSubscription[subscriptionId] == msg.sender,
-            "Caller is not the owner!" 
+            "Caller is not the owner!"
         );
 
         lastestPayment[buyer][vpId] = RPaymentStruct({

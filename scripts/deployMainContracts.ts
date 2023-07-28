@@ -28,7 +28,6 @@ export const deployMainContracts = async (taskArgs: any, hre: any) => {
       const depositFactoryContract = await deployer.deploy(
         "DepositFactoryContract",
         [
-          layerzeroConfig[network].lzEndpoint,
           usdcAddresses[network],
           ownerAccount,
           adminWalletAccount,
@@ -41,7 +40,7 @@ export const deployMainContracts = async (taskArgs: any, hre: any) => {
       console.log(`Deploying ReceiveFactoryContract to ${network}`);
       const receiveFactoryContract = await deployer.deploy(
         "ReceiveFactoryContract",
-        [layerzeroConfig[network].lzEndpoint]
+        []
       );
 
       receiveFactoryContractData[networkName] = receiveFactoryContract.address;

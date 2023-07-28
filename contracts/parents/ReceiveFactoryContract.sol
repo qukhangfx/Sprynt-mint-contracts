@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
-import "@layerzerolabs/solidity-examples/contracts/lzApp/NonblockingLzApp.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "../childs/ERC1155.sol";
 import {CloneFactory} from "../library/CloneFactory.sol";
@@ -8,7 +7,6 @@ import {CloneFactory} from "../library/CloneFactory.sol";
 import "hardhat/console.sol";
 
 contract ReceiveFactoryContract is
-    NonblockingLzApp,
     CloneFactory,
     AccessControl
 {
@@ -36,9 +34,9 @@ contract ReceiveFactoryContract is
     mapping(address => address) public nftContracts; // seller => nftContract address
     address private _masterNftContractAddress;
 
-    constructor(
-        address _layerZeroEndpoint
-    ) NonblockingLzApp(_layerZeroEndpoint) {}
+    constructor() {
+        _setupRole(OWNER_ROLE, msg.sender);
+    }
 
     /** NFT CONTRACT **/
     
@@ -47,10 +45,10 @@ contract ReceiveFactoryContract is
         address to,
         uint256 amount,
         bytes memory data
-    ) public onlyValidator {
+    ) public onlyPermissioned {
         require(
             nftContracts[seller] != address(0),
-            "nft contract is not created."
+            "Nft contract is not created."
         );
         if (amount == 1) {
             ERC1155Contract(nftContracts[seller]).mintToken(to, data);
@@ -69,12 +67,12 @@ contract ReceiveFactoryContract is
     ) external {
         require(
             nftContracts[msg.sender] == address(0),
-            "already created nft contract."
+            "Already created nft contract."
         );
 
         require(
             _masterNftContractAddress != address(0),
-            "master nft contract address is not set."
+            "Master nft contract address is not set."
         );
 
         address clone = createClone(_masterNftContractAddress);
@@ -98,25 +96,42 @@ contract ReceiveFactoryContract is
     function setName(
         address _nftContractAddress,
         string memory _name
-    ) external onlyOwner {
+    ) external onlyPermissioned {
         ERC1155Contract(_nftContractAddress).setName(_name);
     }
 
     function setSymbol(
         address _nftContractAddress,
         string memory _symbol
-    ) external onlyOwner {
+    ) external onlyPermissioned {
         ERC1155Contract(_nftContractAddress).setSymbol(_symbol);
     }
 
-    function setBaseURI(
+    function setBaseUri(
         address _nftContractAddress,
-        string memory _baseURI
-    ) external onlyOwner {
-        ERC1155Contract(_nftContractAddress).setBaseURI(_baseURI);
+        string memory _baseUri
+    ) external onlyPermissioned {
+        ERC1155Contract(_nftContractAddress).setBaseUri(_baseUri);
     }
 
     /** UTILS */
+
+    modifier onlyPermissioned() {
+        require(
+            hasRole(OWNER_ROLE, msg.sender) ||
+                hasRole(VALIDATOR_ROLE, msg.sender),
+            "Sender does not have the required role"
+        );
+        _;
+    }
+
+    modifier onlyOwner() {
+        require(
+            hasRole(OWNER_ROLE, msg.sender),
+            "Caller is not a owner"
+        );
+        _;
+    }
 
     modifier onlyValidator() {
         require(
@@ -133,112 +148,4 @@ contract ReceiveFactoryContract is
     function revokeValidatorRole(address account) external onlyOwner {
         _revokeRole(VALIDATOR_ROLE, account);
     }
-
-    /** UNUSED FUNCTIONS **/
-
-    // function createDepositContractBySeller(
-    //     uint16 dstChainId,
-    //     address sellerAddress,
-    //     address tokenAddress,
-    //     uint16 depositContractDstChainId,
-    //     uint256 mintPrice,
-    //     uint256 whiteListMintPrice,
-    //     uint256 minMintQuantity,
-    //     uint256 maxMintQuantity,
-    //     uint256 totalSupply,
-    //     uint256 deadline,
-    //     uint256 depositDeadline,
-    //     address[] memory whiteList,
-    //     bytes calldata adapterParams
-    // ) external payable {
-    //     bytes memory encodedPayload = abi.encode(
-    //         2,
-    //         sellerAddress,
-    //         tokenAddress,
-    //         depositContractDstChainId,
-    //         mintPrice,
-    //         whiteListMintPrice,
-    //         minMintQuantity,
-    //         maxMintQuantity,
-    //         totalSupply,
-    //         deadline,
-    //         depositDeadline,
-    //         whiteList
-    //     );
-    //     (uint nativeFee, uint zroFee) = estimateFee(
-    //         dstChainId,
-    //         false,
-    //         adapterParams,
-    //         encodedPayload
-    //     );
-    //     require(msg.value >= nativeFee, "Insufficient fee");
-
-    //     _lzSend(
-    //         dstChainId,
-    //         encodedPayload,
-    //         payable(tx.origin),
-    //         address(0x0),
-    //         adapterParams,
-    //         nativeFee
-    //     );
-    // }
-
-    // function createPayContractBySeller(
-    //     uint256 maxAcceptedValue,
-    //     address[] memory tokenAddresses,
-    //     uint256 deadline,
-    //     uint16 dstChainId,
-    //     bytes calldata adapterParams
-    // ) public payable {
-    //     bytes memory encodedPayload = abi.encode(
-    //         1,
-    //         maxAcceptedValue,
-    //         tokenAddresses,
-    //         msg.sender,
-    //         deadline
-    //     );
-
-    //     (uint nativeFee, uint zroFee) = estimateFee(
-    //         dstChainId,
-    //         false,
-    //         adapterParams,
-    //         encodedPayload
-    //     );
-
-    //     require(msg.value >= nativeFee, "Insufficient fee");
-
-    //     _lzSend(
-    //         dstChainId,
-    //         encodedPayload,
-    //         payable(msg.sender),
-    //         address(0x0),
-    //         adapterParams,
-    //         nativeFee
-    //     );
-    // }
-
-    /** OTHERS **/
-
-    function estimateFee(
-        uint16 dstChainId_,
-        bool _useZro,
-        bytes calldata _adapterParams,
-        bytes memory encodedPayload
-    ) public view returns (uint nativeFee, uint zroFee) {
-        return
-            lzEndpoint.estimateFees(
-                dstChainId_,
-                address(this),
-                encodedPayload,
-                _useZro,
-                _adapterParams
-            );
-    }
-
-    function _nonblockingLzReceive(
-        uint16 _srcChainId,
-        bytes memory _srcAddress,
-        uint64 _nonce,
-        bytes memory _payload
-    ) internal virtual override {}
 }

@@ -12,6 +12,8 @@ import {
   RPaymentContract,
   StaticDataFeed,
   ChainLinkPriceFeed,
+  SimplePay,
+  ERC1155Contract,
 } from "../typechain-types";
 
 import { getBigNumber } from "./utils";
@@ -73,11 +75,10 @@ describe("Test multichain minting engine", () => {
   let clientWalletAddress: string;
   let validatorRoleAccountAddress: string;
 
-  let ftName = "Banh tet La Cam";
+  let nftName = "Banh tet La Cam";
   let nftSymbol = "bTET";
 
-  const tokenURI =
-    "https://bafybeidyj2ases25wrcwyisxsbnfo6qe7oe4re5ql77uspoo6d33benknq.ipfs.nftstorage.link/";
+  const tokenUri = "https://bafybeidyj2ases25wrcwyisxsbnfo6qe7oe4re5ql77uspoo6d33benknq.ipfs.nftstorage.link/";
   const totalSupply = 100;
 
   const erc20TokenName = "USDC";
@@ -101,21 +102,15 @@ describe("Test multichain minting engine", () => {
     staticNativeTokenFeed = (await StaticNativeTokenFeedFactory.deploy(STATIC_NATIVE_PRICE, -1)) as StaticDataFeed;
     await staticNativeTokenFeed.deployed();
 
-    console.log("StaticNativeTokenFeedFactory deployed to:", staticNativeTokenFeed.address);
-
     const StaticCustomTokenFeedFactory = await ethers.getContractFactory("StaticDataFeed");
     staticCustomTokenFeed = (await StaticCustomTokenFeedFactory.deploy(STATIC_TOKEN_PRICE, -1)) as StaticDataFeed;
     await staticCustomTokenFeed.deployed();
 
-    console.log("StaticCustomTokenFeedFactory deployed to:", staticCustomTokenFeed.address);
-
     const ChainlinkPriceFeed = await ethers.getContractFactory("ChainLinkPriceFeed");
-    chainlinkPriceFeed = (await ChainlinkPriceFeed.deploy(
+    chainlinkPriceFeed = (await ChainlinkPriceFeed.connect(owner).deploy(
       staticNativeTokenFeed.address
     )) as ChainLinkPriceFeed;
     await chainlinkPriceFeed.deployed();
-
-    console.log("ChainlinkPriceFeed deployed to:", chainlinkPriceFeed.address);
 
     const TestTokenFactory = await ethers.getContractFactory("TestToken");
     usdcToken = (await TestTokenFactory.deploy(
@@ -125,61 +120,33 @@ describe("Test multichain minting engine", () => {
     )) as TestToken;
     await usdcToken.deployed();
 
-    console.log("TestToken deployed to:", usdcToken.address);
-
     const DepositFactoryContractFactory = await ethers.getContractFactory(
       "DepositFactoryContract"
     );
 
     depositFactoryContract = (await DepositFactoryContractFactory.deploy(
-      ethers.constants.AddressZero,
       ownerAddress,
       adminWalletAddress,
       validatorRoleAccountAddress
     )) as DepositFactoryContract;
     await depositFactoryContract.deployed();
 
-    console.log(
-      "DepositFactoryContract deployed to:",
-      depositFactoryContract.address
-    );
-
     depositFactoryContractB = (await DepositFactoryContractFactory.deploy(
-      ethers.constants.AddressZero,
       ownerAddress,
       adminWalletAddress,
       validatorRoleAccountAddress
     )) as DepositFactoryContract;
     await depositFactoryContractB.deployed();
 
-    console.log(
-      "DepositFactoryContractB deployed to:",
-      depositFactoryContractB.address
-    );
-
     const ReceiveFactoryContractFactory = await ethers.getContractFactory(
       "ReceiveFactoryContract"
     );
 
-    receiveFactoryContract = (await ReceiveFactoryContractFactory.deploy(
-      ethers.constants.AddressZero
-    )) as ReceiveFactoryContract;
+    receiveFactoryContract = (await ReceiveFactoryContractFactory.connect(owner).deploy()) as ReceiveFactoryContract;
     await receiveFactoryContract.deployed();
 
-    console.log(
-      "ReceiveFactoryContract deployed to:",
-      receiveFactoryContract.address
-    );
-
-    receiveFactoryContractB = (await ReceiveFactoryContractFactory.deploy(
-      ethers.constants.AddressZero
-    )) as ReceiveFactoryContract;
+    receiveFactoryContractB = (await ReceiveFactoryContractFactory.connect(owner).deploy()) as ReceiveFactoryContract;
     await receiveFactoryContractB.deployed();
-
-    console.log(
-      "ReceiveFactoryContract deployed to:",
-      receiveFactoryContractB.address
-    );
 
     await usdcToken.mint(
       clientWalletAddress,
@@ -190,11 +157,17 @@ describe("Test multichain minting engine", () => {
       .connect(owner)
       .setupValidatorRole(validatorRoleAccountAddress);
 
+    await expect(receiveFactoryContract
+      .connect(owner)
+      .revokeValidatorRole(validatorRoleAccountAddress)).to.be.fulfilled;
+
+    await expect(receiveFactoryContract
+      .connect(owner)
+      .setupValidatorRole(validatorRoleAccountAddress)).to.be.fulfilled;
+
     const ERC1155Contract = await ethers.getContractFactory("ERC1155Contract");
     const erc1155Contract = await ERC1155Contract.deploy();
     await erc1155Contract.deployed();
-
-    console.log("ERC1155Contract deployed to:", erc1155Contract.address);
 
     await (
       await receiveFactoryContract.setMasterNftContractAddress(
@@ -212,8 +185,6 @@ describe("Test multichain minting engine", () => {
     const depositContract = await DepositContract.deploy();
     await depositContract.deployed();
 
-    console.log("DepositContract deployed to:", depositContract.address);
-
     await (
       await depositFactoryContract.setMasterDepositContractAddress(
         depositContract.address
@@ -229,8 +200,6 @@ describe("Test multichain minting engine", () => {
     const SimplePayContract = await ethers.getContractFactory("SimplePay");
     const simplePayContract = await SimplePayContract.deploy();
     await simplePayContract.deployed();
-
-    console.log("SimplePayContract deployed to:", simplePayContract.address);
 
     await (
       await depositFactoryContract.setMasterPayContractAddress(
@@ -254,29 +223,90 @@ describe("Test multichain minting engine", () => {
       chainlinkPriceFeed.address,
     ) as RPaymentContract;
     await rPaymentContract.deployed();
-
-    console.log("RPaymentContract deployed to:", rPaymentContract.address);
   });
 
   describe("Test", async () => {
     it("[ERC1155Contract] Seller cann't create more than one NFT contract", async () => {
       await expect(
         receiveFactoryContract
-        .connect(sellerWallet)
-        .createNftContractBySeller(
-          tokenURI,
-          1 * 10 ** USD_DECIMALS, // 1 USD
-        )
+          .connect(sellerWallet)
+          .createNftContractBySeller(
+            tokenUri,
+            1 * 10 ** USD_DECIMALS, // 1 USD
+          )
       ).to.be.fulfilled;
 
       await expect(
         receiveFactoryContract
           .connect(sellerWallet)
           .createNftContractBySeller(
-            tokenURI,
+            tokenUri,
             1 * 10 ** USD_DECIMALS, // 1 USD
           )
-      ).to.be.revertedWith("already created nft contract.");
+      ).to.be.revertedWith("Already created nft contract.");
+
+      const nftContractAddress = await receiveFactoryContract.getNftContractsOfAccount(
+        sellerWalletAddress
+      );
+
+      expect(nftContractAddress).to.not.be.equal(ethers.constants.AddressZero);
+
+      const nftContract = await ethers.getContractAt(
+        "ERC1155Contract",
+        nftContractAddress
+      ) as ERC1155Contract;
+
+      const tokenUri_ = await nftContract.uri(1);
+      expect(tokenUri_).to.be.equal(`${tokenUri}1`);
+
+      const usdPrice = await nftContract.usdPrice();
+      expect(usdPrice).to.be.equal(1 * 10 ** USD_DECIMALS);
+
+      const owner_ = await nftContract.owner();
+      expect(owner_).to.be.equal(sellerWalletAddress);
+
+      await expect(
+        nftContract.connect(sellerWallet).setName(nftName)
+      ).to.be.fulfilled;
+
+      const nftName_ = await nftContract.name();
+      expect(nftName_).to.be.equal(nftName);
+
+      await expect(
+        nftContract.connect(sellerWallet).setSymbol(nftSymbol)
+      ).to.be.fulfilled;
+
+      const nftSymbol_ = await nftContract.symbol();
+      expect(nftSymbol_).to.be.equal(nftSymbol);
+
+      await expect(receiveFactoryContract.connect(validatorRoleAccount).setBaseUri(
+        nftContract.address,
+        tokenUri
+      )).to.be.fulfilled;
+
+      await expect(receiveFactoryContract.connect(validatorRoleAccount).setName(
+        nftContract.address,
+        nftName
+      )).to.be.fulfilled;
+
+      await expect(receiveFactoryContract.connect(validatorRoleAccount).setSymbol(
+        nftContract.address,
+        nftSymbol
+      )).to.be.fulfilled;
+
+      await expect(receiveFactoryContract.connect(validatorRoleAccount).mint(
+        sellerWalletAddress,
+        clientWalletAddress,
+        1,
+        "0x"
+      )).to.be.fulfilled;
+
+      await expect(receiveFactoryContract.connect(validatorRoleAccount).mint(
+        sellerWalletAddress,
+        clientWalletAddress,
+        2,
+        "0x"
+      )).to.be.fulfilled;
     });
 
     it("[StaticDataFeed] latestRoundData", async () => {
@@ -305,7 +335,7 @@ describe("Test multichain minting engine", () => {
           usdValue,
           vpId
         )
-      ).to.be.revertedWith("Not supported token!"); 
+      ).to.be.revertedWith("Not supported token!");
     });
 
     it("[Paylink] pay: revert with 'Insufficient native token balances'", async () => {
@@ -336,13 +366,13 @@ describe("Test multichain minting engine", () => {
           sellerWalletAddress,
           usdValue,
           vpId, {
-            value: price.sub(1),
-          }
+          value: price.sub(1),
+        }
         )
       ).to.be.revertedWith("Insufficient native token balances");
     });
 
-    it("[Paylink] pay: fulfilled", async () => {
+    it("[Paylink] pay", async () => {
       const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("test"));
 
       const usdValue = 1 * 10 ** USD_DECIMALS; // 1 USD
@@ -355,8 +385,8 @@ describe("Test multichain minting engine", () => {
           sellerWalletAddress,
           usdValue,
           vpId, {
-            value: price,
-          }
+          value: price,
+        }
         )
       ).to.be.fulfilled;
 
@@ -379,13 +409,13 @@ describe("Test multichain minting engine", () => {
           sellerWalletAddress,
           usdValue,
           vpId, {
-            value: price,
-          }
+          value: price,
+        }
         )
       ).to.be.revertedWith("Already paid!");
     });
 
-    it("[Recurring Payment] setupByValidator: fulfilled", async () => {
+    it("[Recurring Payment] setupByValidator", async () => {
       const subscriptionId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("subscription_id"));
       const usdValue = 1 * 10 ** USD_DECIMALS; // 1 USD
       const duration = 5; // 5 seconds
@@ -410,7 +440,7 @@ describe("Test multichain minting engine", () => {
     it("[Recurring Payment] subscribe / native token: revert with 'Not supported native token!'", async () => {
       const subscriptionId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("subscription_id"));
       const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("vp_id"));
-      
+
       const usdValue = 1 * 10 ** USD_DECIMALS; // 1 USD
       const price = await rPaymentContract.getPrice(usdValue, ethers.constants.AddressZero);
 
@@ -427,10 +457,10 @@ describe("Test multichain minting engine", () => {
       ).to.be.revertedWith("Not supported native token!");
     });
 
-    it("[Recurring Payment] subscribe / custom token: fulfilled", async () => {
+    it("[Recurring Payment] subscribe / custom token", async () => {
       const subscriptionId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("subscription_id"));
       const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("vp_id"));
-      
+
       const usdValue = 1 * 10 ** USD_DECIMALS; // 1 USD
 
       const [tokenSymbol, tokenDecimals] = await chainlinkPriceFeed.getTokenInfo(usdcToken.address);
@@ -439,7 +469,7 @@ describe("Test multichain minting engine", () => {
 
       await expect(
         rPaymentContract.getPrice(usdValue, usdcToken.address)
-      ).to.be.revertedWith("PriceFeed: invalid symbol");
+      ).to.be.revertedWith("PriceFeed: not supported token!");
 
       await expect(
         chainlinkPriceFeed.setPriceFeedAddress(tokenSymbol, staticCustomTokenFeed.address)
@@ -458,8 +488,8 @@ describe("Test multichain minting engine", () => {
           subscriptionId,
           vpId,
           usdcToken.address, {
-            value: 0,
-          }
+          value: 0,
+        }
         )
       ).to.be.revertedWith("ERC20: insufficient allowance");
 
@@ -486,7 +516,7 @@ describe("Test multichain minting engine", () => {
       expect(lastestPayment.token).to.be.equal(usdcToken.address);
       expect(lastestPayment.value).to.be.equal(price);
       expect(lastestPayment.renew).to.be.true;
-      
+
 
       await expect(
         rPaymentContract.connect(clientWallet).subscribe(
@@ -494,8 +524,8 @@ describe("Test multichain minting engine", () => {
           subscriptionId,
           vpId,
           usdcToken.address, {
-            value: 0,
-          }
+          value: 0,
+        }
         )
       ).to.be.revertedWith("Already subscribe!");
 
@@ -507,13 +537,13 @@ describe("Test multichain minting engine", () => {
           subscriptionId,
           newVpId,
           usdcToken.address, {
-            value: 0,
-          }
+          value: 0,
+        }
         )
       ).to.be.revertedWith("ERC20: insufficient allowance");
     });
 
-    it("[Recurring Payment] renew / custom token: fulfilled", async () => {
+    it("[Recurring Payment] renew / custom token", async () => {
       const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("vp_id"));
 
       await expect(
@@ -544,7 +574,7 @@ describe("Test multichain minting engine", () => {
       ).to.be.fulfilled;
     });
 
-    it("[Recurring Payment] disable: fulfilled", async () => {
+    it("[Recurring Payment] disable", async () => {
       const subscriptionId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("subscription_id"));
 
       await expect(
@@ -562,9 +592,9 @@ describe("Test multichain minting engine", () => {
     });
 
     const maxAcceptedUsdValue = 3 * 10 ** USD_DECIMALS; // 3 USD
-    const deadline = 15; // 20 seconds
+    const deadline = 0; // 0 seconds
 
-    it("[DepositFactoryContract] createPayContractBySeller: fulfilled", async () => {
+    it("[DepositFactoryContract] createPayContractBySeller", async () => {
       const tokenAddresses = [ethers.constants.AddressZero];
 
       await expect(
@@ -581,9 +611,9 @@ describe("Test multichain minting engine", () => {
       expect(payContractAddress).to.not.be.equal(ethers.constants.AddressZero);
     });
 
-    it("[SimplePay] initialized" , async () => {
+    it("[SimplePay] initialized", async () => {
       const payContractAddress = await depositFactoryContract.getPayContract(sellerWalletAddress);
-      const simplePayContract = await ethers.getContractAt("SimplePay", payContractAddress);
+      const simplePayContract = await ethers.getContractAt("SimplePay", payContractAddress) as SimplePay;
       expect(simplePayContract.address).to.be.equal(payContractAddress);
       expect(await simplePayContract.initialized()).to.be.true;
       expect(await simplePayContract.deadline()).to.be.equal(deadline);
@@ -593,11 +623,11 @@ describe("Test multichain minting engine", () => {
       expect(await simplePayContract.supportedTokenAddress(usdcToken.address)).to.be.false;
     });
 
-    it("[SimplePay] deposit" , async () => {
+    it("[SimplePay] deposit", async () => {
       const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("pay_vp_id"));
 
       const payContractAddress = await depositFactoryContract.getPayContract(sellerWalletAddress);
-      const simplePayContract = await ethers.getContractAt("SimplePay", payContractAddress);
+      const simplePayContract = await ethers.getContractAt("SimplePay", payContractAddress) as SimplePay;
 
       await expect(
         simplePayContract.connect(clientWallet).deposit(
@@ -619,7 +649,8 @@ describe("Test multichain minting engine", () => {
         simplePayContract.connect(clientWallet).deposit(
           ethers.constants.AddressZero,
           1 * 10 ** USD_DECIMALS,
-          vpId, {
+          vpId,
+          {
             value: 0,
           }
         )
@@ -631,17 +662,18 @@ describe("Test multichain minting engine", () => {
         simplePayContract.connect(clientWallet).deposit(
           ethers.constants.AddressZero,
           1 * 10 ** USD_DECIMALS,
-          vpId, {
+          vpId,
+          {
             value: price,
           }
         )
       ).to.be.fulfilled;
 
       await expect(
-        depositFactoryContract.connect(sellerWallet).updateSupportTokenOfPayContract(
+        depositFactoryContract.connect(validatorRoleAccount).updateSupportTokenOfPayContract(
+          sellerWalletAddress,
           usdcToken.address,
-          true,
-          sellerWalletAddress
+          true
         )
       ).to.be.fulfilled;
 
@@ -651,7 +683,7 @@ describe("Test multichain minting engine", () => {
           maxAcceptedUsdValue,
           vpId
         )
-      ).to.be.revertedWith("vpID is already used");
+      ).to.be.revertedWith("VP id is already used");
 
       const newVpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("new_pay_vp_id"));
 
@@ -669,6 +701,9 @@ describe("Test multichain minting engine", () => {
         usdcToken.connect(clientWallet).approve(simplePayContract.address, usdcPrice)
       ).to.be.fulfilled;
 
+      let balanceOf_ = await usdcToken.balanceOf(simplePayContract.address);
+      expect(balanceOf_).to.be.equal(0);
+
       await expect(
         simplePayContract.connect(clientWallet).deposit(
           usdcToken.address,
@@ -677,42 +712,44 @@ describe("Test multichain minting engine", () => {
         )
       ).to.be.fulfilled;
 
+      balanceOf_ = await usdcToken.balanceOf(simplePayContract.address);
+      expect(balanceOf_).to.be.equal(1 * 10 ** 6);
+
       await expect(
         simplePayContract.connect(sellerWallet).setReceiveStatus(vpId)
       ).to.be.revertedWith("Caller is not a factory contract");
 
       await expect(
-        depositFactoryContract.connect(sellerWallet).setPayReceiveStatus(vpId, sellerWalletAddress)
-      ).to.be.revertedWith("AccessControl: account 0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc is missing role 0x21702c8af46127c7fa207f89d0b0a8441bb32959a0ac7df790e9ab1a25c98926");
+        depositFactoryContract.connect(sellerWallet).setPayReceiveStatus(sellerWalletAddress, vpId)
+      ).to.be.revertedWith("Sender does not have the required role");
 
       await expect(
-        depositFactoryContract.connect(validatorRoleAccount).setPayReceiveStatus(vpId, sellerWalletAddress)
+        depositFactoryContract.connect(validatorRoleAccount).setPayReceiveStatus(sellerWalletAddress, vpId)
       ).to.be.fulfilled;
 
+      const depositItemIndex1 = await simplePayContract.vpOfDepositItems(vpId);
+      expect(depositItemIndex1).to.be.equal(1);
+      expect(await simplePayContract.isReceived(depositItemIndex1)).to.be.true;
+
       await expect(
-        depositFactoryContract.connect(validatorRoleAccount).setPayReceiveStatus(vpId, sellerWalletAddress)
-      ).to.be.revertedWith("This depositItem is already paid");
+        depositFactoryContract.connect(validatorRoleAccount).setPayReceiveStatus(sellerWalletAddress, vpId)
+      ).to.be.revertedWith("This deposit item is already paid");
     });
 
-    it("[SimplePay] withdrawDeposit" , async () => {
+    it("[SimplePay] withdrawDeposit", async () => {
       const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("pay_vp_id"));
       const newVpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("new_pay_vp_id"));
 
       const payContractAddress = await depositFactoryContract.getPayContract(sellerWalletAddress);
-      const simplePayContract = await ethers.getContractAt("SimplePay", payContractAddress);
+      const simplePayContract = await ethers.getContractAt("SimplePay", payContractAddress) as SimplePay;
 
       const depositItemIndex1 = await simplePayContract.vpOfDepositItems(vpId);
       expect(depositItemIndex1).to.be.equal(1);
+      expect(await simplePayContract.isReceived(depositItemIndex1)).to.be.true;
 
       await expect(
         simplePayContract.connect(sellerWallet).withdrawDeposit(depositItemIndex1)
       ).to.be.revertedWith("Caller is not a buyer");
-
-      await expect(
-        simplePayContract.connect(clientWallet).withdrawDeposit(depositItemIndex1)
-      ).to.be.revertedWith("Deadline is not passed");
-
-      await delay(6_000);
 
       await expect(
         simplePayContract.connect(clientWallet).withdrawDeposit(depositItemIndex1)
@@ -721,23 +758,155 @@ describe("Test multichain minting engine", () => {
       const depositItemIndex2 = await simplePayContract.vpOfDepositItems(newVpId);
       expect(depositItemIndex2).to.be.equal(2);
 
-      await expect(
-        simplePayContract.connect(clientWallet).withdrawDeposit(depositItemIndex2)
-      ).to.be.revertedWith("Deadline is not passed");
-
-      await delay(10_000);
-
-      console.log("balanceOf", (await usdcToken.balanceOf(simplePayContract.address)).toString());
-      const allowance = await usdcToken.allowance(simplePayContract.address, clientWalletAddress);
-      console.log("allowance", allowance.toString());
+      let balanceOf_ = await usdcToken.balanceOf(simplePayContract.address);
+      expect(balanceOf_).to.be.equal(1 * 10 ** 6);
 
       await expect(
         simplePayContract.connect(clientWallet).withdrawDeposit(depositItemIndex2)
-      ).to.be.revertedWith("ERC20: insufficient allowance");
+      ).to.be.fulfilled;
+
+      balanceOf_ = await usdcToken.balanceOf(simplePayContract.address);
+      expect(balanceOf_).to.be.equal(0);
 
       await expect(
         simplePayContract.connect(clientWallet).withdrawDeposit(depositItemIndex2)
       ).to.be.revertedWith("Caller is not a buyer");
+    });
+
+    it("[SimplePay] withdrawFund", async () => {
+      const payContractAddress = await depositFactoryContract.getPayContract(sellerWalletAddress);
+      const simplePayContract = await ethers.getContractAt("SimplePay", payContractAddress) as SimplePay;
+
+      expect(await simplePayContract.allowances(ethers.constants.AddressZero)).to.be.equal(533746609774971);
+      expect(await simplePayContract.allowances(usdcToken.address)).to.be.equal(0);
+
+      const usdValue = 2 * 10 ** USD_DECIMALS;
+
+      const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("new_pay_vp_id_withdraw_fund"));
+      const price = await simplePayContract.getPrice(usdValue, usdcToken.address);
+      await expect(
+        usdcToken.connect(clientWallet).approve(simplePayContract.address, price)
+      ).to.be.fulfilled;
+
+      await expect(
+        simplePayContract.connect(clientWallet).deposit(
+          usdcToken.address,
+          usdValue,
+          vpId
+        )
+      ).to.be.fulfilled;
+
+      await expect(
+        depositFactoryContract.connect(validatorRoleAccount).setPayReceiveStatus(sellerWalletAddress, vpId)
+      ).to.be.fulfilled;
+
+      expect(await simplePayContract.allowances(usdcToken.address)).to.be.equal(price);
+
+      await expect(
+        simplePayContract.connect(clientWallet).withdrawFund(usdcToken.address, usdValue)
+      ).to.be.revertedWith("Caller is not an owner");
+
+      await expect(
+        simplePayContract.connect(sellerWallet).withdrawFund(usdcToken.address, usdValue + 10 ** 2)
+      ).to.be.revertedWith("Insufficient fund");
+
+      await expect(
+        simplePayContract.connect(sellerWallet).withdrawFund(usdcToken.address, usdValue / 2)
+      ).to.be.fulfilled;
+
+      expect(await simplePayContract.allowances(usdcToken.address)).to.be.equal(price / 2);
+
+      expect(await simplePayContract.allowances(ethers.constants.AddressZero)).to.be.equal(533746609774971);
+
+      await expect(
+        simplePayContract.connect(sellerWallet).withdrawFund(ethers.constants.AddressZero, 0.5 * 10 ** USD_DECIMALS)
+      ).to.be.fulfilled;
+
+      expect(await simplePayContract.allowances(ethers.constants.AddressZero)).to.be.equal(266873304887486);
+
+      await expect(
+        simplePayContract.connect(sellerWallet).withdrawFund(ethers.constants.AddressZero, 2 * 10 ** USD_DECIMALS)
+      ).to.be.revertedWith("Insufficient fund");
+
+      await expect(
+        simplePayContract.connect(sellerWallet).withdrawFund(usdcToken.address, 2 * 10 ** USD_DECIMALS)
+      ).to.be.revertedWith("Insufficient fund");
+    });
+
+    it("[SimplePay] buyer - refund", async () => {
+      const payContractAddress = await depositFactoryContract.getPayContract(sellerWalletAddress);
+      const simplePayContract = await ethers.getContractAt("SimplePay", payContractAddress) as SimplePay;
+
+      const usdValue = 3 * 10 ** USD_DECIMALS;
+
+      const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("new_pay_vp_id_refund"));
+      const price = await simplePayContract.getPrice(usdValue, usdcToken.address);
+      await expect(
+        usdcToken.connect(clientWallet).approve(simplePayContract.address, price)
+      ).to.be.fulfilled;
+
+      await expect(
+        simplePayContract.connect(clientWallet).deposit(
+          usdcToken.address,
+          usdValue,
+          vpId
+        )
+      ).to.be.fulfilled;
+
+      await expect(simplePayContract.connect(clientWallet).refund(ethers.constants.AddressZero)).to.be.fulfilled;
+
+      {
+        const beforeRefund = await usdcToken.balanceOf(clientWalletAddress);
+
+        await expect(
+          simplePayContract.connect(clientWallet).refund(usdcToken.address)
+        ).to.be.fulfilled;
+
+        const afterRefund = await usdcToken.balanceOf(clientWalletAddress);
+        expect(afterRefund.sub(beforeRefund)).to.be.equal(price);
+      }
+    });
+
+    it("[DepositContract] initialize", async () => {
+      const usdMintPrice = 2 * 10 ** USD_DECIMALS;
+      const usdWhitelistMintPrice = 1 * 10 ** USD_DECIMALS;
+      const deadline = Math.floor(Date.now() / 1000) + 2; // 2 seconds
+
+      await expect(
+        depositFactoryContract.createDepositContractBySeller(
+          sellerWalletAddress,
+          [ethers.constants.AddressZero],
+          usdMintPrice,
+          usdWhitelistMintPrice,
+          1,
+          3,
+          10,
+          deadline,
+          1,
+          [],
+          chainlinkPriceFeed.address
+        )
+      ).to.be.fulfilled;
+    });
+
+    it("[DepositContract] mint", async () => {
+      // await expect().to.be.fulfilled;
+    });
+
+    it("[DepositContract] setReceiveStatus", async () => {
+      // await expect().to.be.fulfilled;
+    });
+
+    it("[DepositContract] withdrawDeposit", async () => {
+      // await expect().to.be.fulfilled;
+    });
+
+    it("[DepositContract] withdraw", async () => {
+      // await expect().to.be.fulfilled;
+    });
+
+    it("[DepositContract] withdrawAll", async () => {
+      // await expect().to.be.fulfilled;
     });
   });
 });
