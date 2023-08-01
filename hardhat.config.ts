@@ -37,7 +37,6 @@ const chainIds = {
 };
 
 const PRIVATE_KEY = process.env.PK || "";
-// const DEPOSIT_PRIVATE_KEY = process.env.DEPOSIT_ROLE_PK || "";
 
 const ETHERSCAN_KEY = process.env.ETHERSCAN_KEY || "";
 const POLYGONSCAN_KEY = process.env.POLYGONSCAN_KEY || "";
@@ -87,7 +86,7 @@ const config = {
       url: MAIN_POLYGON_RPC_URL,
       chainId: chainIds.polygon,
       accounts: [PRIVATE_KEY],
-      gasMultiplier: 1.25,
+      gasMultiplier: 1.5,
     },
     polygonMumbai: {
       url: TEST_POLYGON_RPC_URL,
@@ -205,13 +204,13 @@ const config = {
     compilers: [
       {
         version: "0.8.17",
-        // settings: {
-        //   optimizer: {
-        //     enabled: true,
-        //     runs: 100,
-        //   },
-        //   viaIR: true,
-        // },
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 100,
+          },
+          viaIR: true,
+        },
       },
     ],
   },

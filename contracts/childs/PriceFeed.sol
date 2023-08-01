@@ -71,6 +71,12 @@ contract ChainLinkPriceFeed is AccessControl {
         _;
     }
 
+    function setNativeTokenPriceFeedAddress(
+        address nativeTokenPriceFeedAddress
+    ) external onlyOwner {
+        _nativeTokenPriceFeedAddress = nativeTokenPriceFeedAddress;
+    }
+
     function transferOwner(address newOwner) public onlyOwner {
         _setupRole(OWNER_ROLE, newOwner);
         _revokeRole(OWNER_ROLE, msg.sender);
@@ -100,6 +106,31 @@ contract ChainLinkPriceFeed is AccessControl {
         string memory symbol = token.symbol();
         uint8 decimals = token.decimals();
         return (symbol, decimals);
+    }
+
+    function convertTokenPriceToUsd(
+        uint256 tokenAmount,
+        address tokenAddress
+    ) public view returns (uint256) {
+        if (tokenAddress == address(0)) {
+            (, uint256 nativeTokenAmountToUsdValue) = _convertTokenPriceToUsd(
+                tokenAmount,
+                _nativeTokenPriceFeedAddress,
+                18
+            );
+            return nativeTokenAmountToUsdValue;
+        }
+
+        (string memory tokenSymbol, uint8 tokenDecimals) = getTokenInfo(
+            tokenAddress
+        );
+        address priceFeedAddress = getPriceFeedAddress(tokenSymbol);
+        (, uint256 tokenAmountToUsdValue) = _convertTokenPriceToUsd(
+            tokenAmount,
+            priceFeedAddress,
+            tokenDecimals
+        );
+        return tokenAmountToUsdValue;
     }
 
     function convertUsdToTokenPrice(
@@ -149,5 +180,21 @@ contract ChainLinkPriceFeed is AccessControl {
             tokenPrice;
 
         return (tokenPrice, usdValueToTokenAmount);
+    }
+
+    function _convertTokenPriceToUsd(
+        uint256 tokenAmount,
+        address tokenPriceFeedAddress,
+        uint8 tokenDecimals
+    ) public view returns (uint256, uint256) {
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(
+            tokenPriceFeedAddress
+        );
+
+        uint256 tokenPrice = priceFeed.getData();
+        uint256 tokenAmountToUsdValue = (tokenAmount * tokenPrice) /
+            10 ** tokenDecimals;
+
+        return (tokenPrice, tokenAmountToUsdValue);
     }
 }

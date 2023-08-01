@@ -1,4 +1,3 @@
-import { Contract } from "ethers";
 import layerzeroConfig from "../constants/layerzeroConfig.json";
 import { load, save } from "../utils";
 
@@ -9,6 +8,8 @@ import {
     SimplePay,
     DepositContract,
     ERC1155Contract,
+    ChainLinkPriceFeed,
+    RPaymentContract,
 } from "../typechain-types";
 
 const EMPTY_ADDRESS: string = "0x0000000000000000000000000000000000000000";
@@ -33,19 +34,33 @@ const usdc: any = {
     "ftmTestnet": "0x06b193D42662B7a48641b31f9BAC9C06f48c019C",
     "bscTestnet": "0x7255f860ab81c0b0b9d50f1f06ce88d5c6af7d40",
     // Below are mainnet addresses
-    "polygon": "",
-    "bsc": "",
-    "avalanche": "",
-    "opera": "",
-    "mainnet": "",
+    "polygon": "0x2791bca1f2de4661ed88a30c99a7a9449aa84174",
+    "bsc": "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
+    "avalanche": "0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e",
+    "opera": "0x04068da6c83afcfa0e13ba15a6696662335d5b75",
+    "mainnet": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+};
+
+const nativeTokenPriceFeedAddress: any = {
+    "polygon": "0xAB594600376Ec9fD91F8e885dADF0CE036862dE0",
+    "bsc": "0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE",
+    "avalanche": "0x0A77230d17318075983913bC2145DB16C7366156",
+    "opera": "0xf4766552D15AE4d256Ad41B6cf2933482B0680dc",
+    "mainnet": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
+
+    "avalancheFujiTestnet": "0x5498BB86BC934c8D34FDA08E81D444153d0D06aD",
+    "polygonMumbai": "0xd0D5e3DB44DE05E9F294BB0a3bEEaF030DE24Ada",
+    "bscTestnet": "0x2514895c72f50D8bd4B4F9b1110F0D6bD2c97526",
+    "ftmTestnet": "0xe04676B9A9A2973BCb0D1478b5E1E9098BBB7f3D",
+    "sepolia": "0x694AA1769357215DE4FAC081bf1f309aDC325306",
 };
 
 export const deployAll = async (taskArgs: any, hre: any) => {
     // const networks: string[] = ["sepolia", "avalancheFujiTestnet", "ftmTestnet", "bscTestnet"];
-
-    const networks: string[] = ["mainnet"]; // "polygon", "bsc", "avalanche", "opera"
-
-    // const networks: string[] = ["polygonMumbai"];
+    // const networks: string[] = ["mainnet"]; // "polygon", "bsc", "avalanche", "opera", 
+    // "arbitrumGoerli", "arbitrumOne"
+    // const networks: string[] = ["polygonMumbai", "sepolia", "avalancheFujiTestnet", "ftmTestnet", "bscTestnet"];
+    const networks: string[] = ["polygon"];
 
     let ContractAddresses = await load("ContractAddresses");
 
@@ -138,7 +153,7 @@ export const deployAll = async (taskArgs: any, hre: any) => {
             );
         }
 
-        await tryUntilSucceed(DeployDeposit);
+        // await tryUntilSucceed(DeployDeposit);
 
         async function DeploySimplePay() {
             console.log("Deploying SimplePayContract");
@@ -166,6 +181,34 @@ export const deployAll = async (taskArgs: any, hre: any) => {
 
         // await tryUntilSucceed(DeploySimplePay);
 
+        async function DeployPriceFeedContract() {
+            console.log("Deploying ChainLinkPriceFeed");
+
+            const priceFeedContract = await hre.ethers.getContractFactory(
+                "ChainLinkPriceFeed"
+            );
+
+            const priceFeedContractInstance = await priceFeedContract
+                .connect(signer)
+                .deploy(
+                    nativeTokenPriceFeedAddress[mintChain],
+                );
+            await priceFeedContractInstance.deployed();
+
+            if (!ContractAddresses["PriceFeedContract"]) {
+                ContractAddresses["PriceFeedContract"] = {};
+            }
+            ContractAddresses["PriceFeedContract"][mintChain] = priceFeedContractInstance.address;
+            await save("ContractAddresses", ContractAddresses);
+
+            console.log(
+                "PriceFeedContract deployed to:",
+                priceFeedContractInstance.address
+            );
+        }
+
+        // await tryUntilSucceed(DeployPriceFeedContract);
+
         async function DeployRPaymentContract() {
             console.log("Deploying RPaymentContract");
 
@@ -176,8 +219,9 @@ export const deployAll = async (taskArgs: any, hre: any) => {
             const rPaymentContractInstance = await rPaymentContract
                 .connect(signer)
                 .deploy(
-                    usdc[mintChain],
+                    [usdc[mintChain], EMPTY_ADDRESS],
                     ContractAddresses["DepositFactoryContract"][mintChain],
+                    ContractAddresses["PriceFeedContract"][mintChain],
                 );
             await rPaymentContractInstance.deployed();
 
@@ -219,204 +263,8 @@ export const deployAll = async (taskArgs: any, hre: any) => {
             );
         }
 
-        await tryUntilSucceed(DeployERC1155);
+        // await tryUntilSucceed(DeployERC1155);
     }
-
-    // for (let index = 0; index < networks.length; ++index) {
-    //     const mintChain = networks[index];
-
-    //     await hre.changeNetwork(mintChain);
-    //     console.log(`Switched to ${mintChain}`);
-
-    //     const [signer] = await hre.ethers.getSigners();
-
-    //     async function Verify() {
-    //         console.log("Verifying DepositFactoryContract");
-    //         const depositFactoryContract = (await hre.ethers.getContractAt(
-    //             "DepositFactoryContract",
-    //             ContractAddresses["DepositFactoryContract"][mintChain]
-    //         )) as DepositFactoryContract;
-
-    //         try {
-    //             await hre.run("verify:verify", {
-    //                 address: depositFactoryContract.address,
-    //                 constructorArguments: [
-    //                     signer.address,
-    //                     signer.address,
-    //                     signer.address,
-    //                 ],
-    //             });
-    //         } catch (error) {
-    //             console.log("Error verifying DepositFactoryContract")
-    //             console.log(error);
-    //         }
-
-    //         console.log("Verifying ReceiveFactoryContract");
-    //         const receiveFactoryContract = (await hre.ethers.getContractAt(
-    //             "ReceiveFactoryContract",
-    //             ContractAddresses["ReceiveFactoryContract"][mintChain]
-    //         )) as ReceiveFactoryContract;
-
-    //         try {
-    //             await hre.run("verify:verify", {
-    //                 address: receiveFactoryContract.address,
-    //                 constructorArguments: [],
-    //             });
-    //         } catch (error) {
-    //             console.log("Error verifying ReceiveFactoryContract")
-    //             console.log(error);
-    //         }
-
-    //         console.log("Verifying DepositContract");
-    //         const depositContract = (await hre.ethers.getContractAt(
-    //             "DepositContract",
-    //             ContractAddresses["DepositContract"][mintChain]
-    //         )) as DepositContract;
-
-    //         try {
-    //             await hre.run("verify:verify", {
-    //                 address: depositContract.address,
-    //                 constructorArguments: [],
-    //             });
-    //         } catch (error) {
-    //             console.log("Error verifying DepositContract")
-    //             console.log(error);
-    //         }
-
-    //         console.log("Verifying SimplePayContract");
-    //         const simplePayContract = (await hre.ethers.getContractAt(
-    //             "SimplePay",
-    //             ContractAddresses["SimplePayContract"][mintChain]
-    //         )) as SimplePay;
-
-    //         try {
-    //             await hre.run("verify:verify", {
-    //                 address: simplePayContract.address,
-    //                 constructorArguments: [],
-    //             });
-    //         } catch (error) {
-    //             console.log("Error verifying SimplePayContract")
-    //             console.log(error);
-    //         }
-
-    //         console.log("Verifying RPaymentContract");
-    //         const rPaymentContract = (await hre.ethers.getContractAt(
-    //             "RPaymentContract",
-    //             ContractAddresses["RPaymentContract"][mintChain]
-    //         )) as SimplePay;
-
-    //         try {
-    //             await hre.run("verify:verify", {
-    //                 address: rPaymentContract.address,
-    //                 constructorArguments: [
-    //                     usdc[mintChain],
-    //                     ContractAddresses["DepositFactoryContract"][mintChain],
-    //                 ],
-    //             });
-    //         } catch (error) {
-    //             console.log("Error verifying RPaymentContract")
-    //             console.log(error);
-    //         }
-
-    //         console.log("Verifying ERC1155Contract");
-    //         const erc1155Contract = (await hre.ethers.getContractAt(
-    //             "ERC1155Contract",
-    //             ContractAddresses["ERC1155Contract"][mintChain]
-    //         )) as ERC1155Contract;
-
-    //         try {
-    //             await hre.run("verify:verify", {
-    //                 address: erc1155Contract.address,
-    //                 constructorArguments: [],
-    //             });
-    //         } catch (error) {
-    //             console.log("Error verifying ERC1155Contract")
-    //             console.log(error);
-    //         }
-    //     }
-    //     // await Verify();
-    // }
-
-    // await delay(5000);
-
-    async function SetAllTrustRemotes() {
-        for (const [srcNetworkName, sourceContractAddress] of Object.entries(
-            ContractAddresses["DepositFactoryContract"]
-        )) {
-            if (hre.network.name !== srcNetworkName) {
-                await hre.changeNetwork(srcNetworkName);
-                console.log(`Switched on ${srcNetworkName}`);
-            }
-
-            const depositFactoryContract = (await hre.ethers.getContractAt(
-                "DepositFactoryContract",
-                sourceContractAddress
-            )) as DepositFactoryContract;
-
-            for (const [dstNetworkName, destContractAddress] of Object.entries(
-                ContractAddresses["ReceiveFactoryContract"]
-            )) {
-                console.log(
-                    `Set trust remote from ${srcNetworkName} to ${dstNetworkName}`
-                );
-
-                try {
-                    await tryUntilSucceed(async () => {
-                        await (
-                            await depositFactoryContract.setTrustedRemote(
-                                layerzeroConfig[dstNetworkName].chainId,
-                                hre.ethers.utils.solidityPack(
-                                    ["address", "address"],
-                                    [destContractAddress, sourceContractAddress]
-                                )
-                            )
-                        ).wait();
-                    });
-                } catch (e) {
-                    console.log(e);
-                }
-            }
-        }
-
-        for (const [dstNetworkName, destContractAddress] of Object.entries(
-            ContractAddresses["ReceiveFactoryContract"]
-        )) {
-            if (hre.network.name !== dstNetworkName) {
-                await hre.changeNetwork(dstNetworkName);
-                console.log(`Switched on ${dstNetworkName}`);
-            }
-
-            const receiveFactoryContract = (await hre.ethers.getContractAt(
-                "ReceiveFactoryContract",
-                destContractAddress
-            )) as ReceiveFactoryContract;
-            for (const [srcNetworkName, sourceContractAddress] of Object.entries(
-                ContractAddresses["DepositFactoryContract"]
-            )) {
-                console.log(
-                    `Set trust remote from ${dstNetworkName} to ${srcNetworkName}`
-                );
-
-                try {
-                    await tryUntilSucceed(async () => {
-                        await (
-                            await receiveFactoryContract.setTrustedRemote(
-                                layerzeroConfig[srcNetworkName].chainId,
-                                hre.ethers.utils.solidityPack(
-                                    ["address", "address"],
-                                    [sourceContractAddress, destContractAddress]
-                                )
-                            )
-                        ).wait();
-                    });
-                } catch (e) {
-                    console.log(e);
-                }
-            }
-        }
-    }
-    
-    // await SetAllTrustRemotes();
 
     for (let index = 0; index < networks.length; ++index) {
         const mintChain = networks[index];
@@ -456,7 +304,7 @@ export const deployAll = async (taskArgs: any, hre: any) => {
                 ).wait();
             }, 3);
         }
-        await SetMasterDepositContractAddress();
+        // await SetMasterDepositContractAddress();
 
         async function SetMasterPayContractAddress() {
             console.log("Set Master Pay Contract Address");
@@ -490,7 +338,7 @@ export const deployAll = async (taskArgs: any, hre: any) => {
                 ).wait();
             }, 3);
         }
-        await SetMasterERC1155ContractAddress();
+        // await SetMasterERC1155ContractAddress();
 
         async function SetupValidatorRole() {
             console.log("Setup Validator Role");
@@ -593,11 +441,11 @@ export const deployAll = async (taskArgs: any, hre: any) => {
         // await SetupPlatformFeeMint();
     }
 
-    // 1. Deploy and verify Deposit Factory Contract
-    // 2. Deploy and verify Receive Factory Contract
-    // 3. Deploy and verify Deposit Contract
-    // 4. Deploy and verify Pay Contract
-    // 5. Deploy and verify ERC1155 Contract
+    // 1. Deploy Deposit Factory Contract
+    // 2. Deploy Receive Factory Contract
+    // 3. Deploy Deposit Contract
+    // 4. Deploy Pay Contract
+    // 5. Deploy ERC1155 Contract
     // 6. Set All Trust Remotes
     // 7. Set Master Deposit Contract Address
     // 8. Set Master Pay Contract Address
@@ -606,4 +454,80 @@ export const deployAll = async (taskArgs: any, hre: any) => {
     // 11. Create Nft Contract By Seller
     // 12. Create Deposit Contract By Seller
     // 13. Create Pay Contract By Seller
+
+    // 14. Verify ChainLink Price Feed Contract
+    for (let index = 0; index < networks.length; ++index) {
+        const mintChain = networks[index];
+
+        await hre.changeNetwork(mintChain);
+
+        const [signer] = await hre.ethers.getSigners();
+
+        console.log("🚀 Verify price feed contract:", ContractAddresses["PriceFeedContract"][mintChain]);
+
+        const priceFeedContract = (await hre.ethers.getContractAt(
+            "ChainLinkPriceFeed",
+            ContractAddresses["PriceFeedContract"][mintChain]
+        )) as ChainLinkPriceFeed;
+
+        await hre.run("verify:verify", {
+            address: ContractAddresses["PriceFeedContract"][mintChain],
+            constructorArguments: [
+                nativeTokenPriceFeedAddress[mintChain]
+            ],
+        });
+    }
+
+    for (let index = 0; index < networks.length; ++index) {
+        const mintChain = networks[index];
+
+        await hre.changeNetwork(mintChain);
+
+        const [signer] = await hre.ethers.getSigners();
+
+        // const rPaymentContract = (await hre.ethers.getContractAt(
+        //     "RPaymentContract",
+        //     ContractAddresses["RPaymentContract"][mintChain]
+        // )) as RPaymentContract;
+
+        // const priceFeed = await rPaymentContract.getPrice(
+        //     1 * 10 ** 8,
+        //     usdc[mintChain],
+        // );
+
+        // console.log(mintChain, "🚀 priceFeed:", Number(priceFeed) / 10 ** 6);
+
+        // const depositFactoryContract = (await hre.ethers.getContractAt(
+        //     "DepositFactoryContract",
+        //     ContractAddresses["DepositFactoryContract"][mintChain]
+        // )) as DepositFactoryContract;
+
+        // const validatorRole = await depositFactoryContract.SPRYNT_VALIDATOR_ROLE();
+        // console.log(mintChain, "🚀 validatorRole:", validatorRole);
+
+        // console.log(mintChain, "🚀 depositFactoryContract:", depositFactoryContract.address);
+        // const hasRole = await depositFactoryContract.hasRole(
+        //     validatorRole,
+        //     signer.address
+        // );
+
+        // console.log(mintChain, "🚀 hasRole:", hasRole);
+    }
+
+    // const mintChain = "polygonMumbai";
+    // await hre.changeNetwork(mintChain);
+
+    // const [signer] = await hre.ethers.getSigners();
+
+    // const chainLinkPriceFeed = (await hre.ethers.getContractAt(
+    //     "ChainLinkPriceFeed",
+    //     ContractAddresses["PriceFeedContract"][mintChain]
+    // )) as ChainLinkPriceFeed;
+
+    // const tx = await chainLinkPriceFeed.setPriceFeedAddress(
+    //     'USDC',
+    //     '0x572dDec9087154dC5dfBB1546Bb62713147e0Ab0'
+    // );
+
+    // console.log("🚀 tx:", tx);
 }

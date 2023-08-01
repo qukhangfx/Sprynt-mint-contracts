@@ -137,7 +137,7 @@ contract RPaymentContract is AccessControl {
 
         require(
             depositFactoryContract.hasRole(SPRYNT_VALIDATOR_ROLE, msg.sender),
-            "RPaymentContract: call is not the validator!"
+            "RPaymentContract: caller is not the validator!"
         );
 
         _;
@@ -253,7 +253,7 @@ contract RPaymentContract is AccessControl {
         bytes32 subscriptionId,
         uint256 usdValue,
         uint256 duration
-    ) public {
+    ) public onlySpryntValidator {
         require(
             setupPayment[seller][subscriptionId].duration == 0,
             "RPaymentContract: already setup!"
