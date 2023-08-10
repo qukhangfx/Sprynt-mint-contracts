@@ -17,6 +17,8 @@ const EMPTY_ADDRESS: string = "0x0000000000000000000000000000000000000000";
 const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
 async function tryUntilSucceed(fn: any, maxTries: number = 4) {
+    delay(2000);
+
     try {
         return await fn();
     } catch (e) {
@@ -39,6 +41,8 @@ const usdc: any = {
     "avalanche": "0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e",
     "opera": "0x04068da6c83afcfa0e13ba15a6696662335d5b75",
     "mainnet": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+
+    "gnosis": "0xddafbb505ad214d7b80b1f830fccc89b60fb7a83",
 };
 
 const nativeTokenPriceFeedAddress: any = {
@@ -53,6 +57,8 @@ const nativeTokenPriceFeedAddress: any = {
     "bscTestnet": "0x2514895c72f50D8bd4B4F9b1110F0D6bD2c97526",
     "ftmTestnet": "0xe04676B9A9A2973BCb0D1478b5E1E9098BBB7f3D",
     "sepolia": "0x694AA1769357215DE4FAC081bf1f309aDC325306",
+
+    "gnosis": "0x678df3415fc31947dA4324eC63212874be5a82f8",
 };
 
 export const deployAll = async (taskArgs: any, hre: any) => {
@@ -455,7 +461,31 @@ export const deployAll = async (taskArgs: any, hre: any) => {
     // 12. Create Deposit Contract By Seller
     // 13. Create Pay Contract By Seller
 
+    // console.log("🚀 14");
+
     // 14. Verify ChainLink Price Feed Contract
+    // for (let index = 0; index < networks.length; ++index) {
+    //     const mintChain = networks[index];
+
+    //     await hre.changeNetwork(mintChain);
+
+    //     const [signer] = await hre.ethers.getSigners();
+
+    //     console.log("🚀 Verify price feed contract:", ContractAddresses["PriceFeedContract"][mintChain]);
+
+    //     const priceFeedContract = (await hre.ethers.getContractAt(
+    //         "ChainLinkPriceFeed",
+    //         ContractAddresses["PriceFeedContract"][mintChain]
+    //     )) as ChainLinkPriceFeed;
+
+    //     await hre.run("verify:verify", {
+    //         address: ContractAddresses["PriceFeedContract"][mintChain],
+    //         constructorArguments: [
+    //             nativeTokenPriceFeedAddress[mintChain]
+    //         ],
+    //     });
+    // }
+
     for (let index = 0; index < networks.length; ++index) {
         const mintChain = networks[index];
 
@@ -463,37 +493,22 @@ export const deployAll = async (taskArgs: any, hre: any) => {
 
         const [signer] = await hre.ethers.getSigners();
 
-        console.log("🚀 Verify price feed contract:", ContractAddresses["PriceFeedContract"][mintChain]);
-
-        const priceFeedContract = (await hre.ethers.getContractAt(
-            "ChainLinkPriceFeed",
-            ContractAddresses["PriceFeedContract"][mintChain]
-        )) as ChainLinkPriceFeed;
-
-        await hre.run("verify:verify", {
-            address: ContractAddresses["PriceFeedContract"][mintChain],
-            constructorArguments: [
-                nativeTokenPriceFeedAddress[mintChain]
-            ],
-        });
-    }
-
-    for (let index = 0; index < networks.length; ++index) {
-        const mintChain = networks[index];
-
-        await hre.changeNetwork(mintChain);
-
-        const [signer] = await hre.ethers.getSigners();
-
-        // const rPaymentContract = (await hre.ethers.getContractAt(
-        //     "RPaymentContract",
-        //     ContractAddresses["RPaymentContract"][mintChain]
-        // )) as RPaymentContract;
+        const rPaymentContract = (await hre.ethers.getContractAt(
+            "RPaymentContract",
+            ContractAddresses["RPaymentContract"][mintChain]
+        )) as RPaymentContract;
 
         // const priceFeed = await rPaymentContract.getPrice(
         //     1 * 10 ** 8,
         //     usdc[mintChain],
         // );
+
+        const tx = await rPaymentContract.connect(signer).updateSupportToken(
+            "0x18ec0A6E18E5bc3784fDd3a3634b31245ab704F6",
+            true
+        );
+
+        console.log(tx);
 
         // console.log(mintChain, "🚀 priceFeed:", Number(priceFeed) / 10 ** 6);
 

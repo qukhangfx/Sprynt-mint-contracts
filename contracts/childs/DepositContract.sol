@@ -67,7 +67,7 @@ contract DepositContract is ReentrancyGuard, ERC165, IERC721, IERC721Metadata {
     using Address for address payable;
 
     event Received(address sender, uint256 value);
-    event Transferred(address from, address to, uint256 tokenId);
+    // event Transferred(address from, address to, uint256 tokenId);
 
     event WithdrawDeposit(address sender, uint256 depositItemIndex);
 
@@ -371,6 +371,8 @@ contract DepositContract is ReentrancyGuard, ERC165, IERC721, IERC721Metadata {
         for (uint256 i = 0; i < tokenIds.length; i++) {
             _owners[tokenIds[i]] = owner;
             _tokensOfAccounts[owner].push(tokenIds[i]);
+
+            emit Transfer(address(0), owner, tokenIds[i]); // OpenSea uses the transfer event to determine if ERC721
         }
     }
 
@@ -431,7 +433,8 @@ contract DepositContract is ReentrancyGuard, ERC165, IERC721, IERC721Metadata {
 
         _tokensOfAccounts[to].push(tokenId);
 
-        emit Transferred(from, to, tokenId);
+        // emit Transferred(from, to, tokenId);
+        emit Transfer(from, to, tokenId); // ERC721
     }
 
     function safeTransferFrom(
@@ -444,7 +447,7 @@ contract DepositContract is ReentrancyGuard, ERC165, IERC721, IERC721Metadata {
             "DepositContract: this account does not have the required token id"
         );
 
-        emit Transferred(from, to, tokenId);
+        emit Transfer(from, to, tokenId);
     }
 
     /** UTILS */
@@ -599,7 +602,14 @@ contract DepositContract is ReentrancyGuard, ERC165, IERC721, IERC721Metadata {
         address from,
         address to,
         uint256 tokenId
-    ) external override {}
+    ) external override {
+        require(
+            _owners[tokenId] == from,
+            "DepositContract: this account does not have the required token id"
+        );
+
+        emit Transfer(from, to, tokenId);
+    }
 
     function approve(address to, uint256 tokenId) external override {}
 

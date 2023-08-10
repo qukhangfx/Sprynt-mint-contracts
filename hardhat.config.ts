@@ -69,6 +69,15 @@ const config = {
     hardhat: {
       // blockGasLimit: 200_000_000,
     },
+    gnosis: {
+      url: "https://rpc.gnosischain.com",
+      accounts: [PRIVATE_KEY],
+    },
+    chiado: {
+      url: "https://rpc.chiadochain.net",
+      gasPrice: 1000000000,
+      accounts: [PRIVATE_KEY],
+    },
     mainnet: {
       url: MAIN_ETH_RPC_URL,
       chainId: chainIds.mainnet,
@@ -158,6 +167,9 @@ const config = {
   },
   etherscan: {
     apiKey: {
+      // gnosis
+      chiado: "your key",
+      gnosis: "HESMMDE9TICEIM697YEKHQJ9KEVBHRHTVW",
       // ethereum
       mainnet: ETHERSCAN_KEY,
       sepolia: ETHERSCAN_KEY,
@@ -196,6 +208,26 @@ const config = {
         urls: {
           apiURL: "https://goerli.explorer.metisdevops.link/api",
           browserURL: "https://goerli.explorer.metisdevops.link",
+        },
+      },
+      {
+        network: "chiado",
+        chainId: 10200,
+        urls: {
+          // Blockscouts
+          apiURL: "https://blockscout.com/gnosis/chiado/api",
+          browserURL: "https://blockscout.com/gnosis/chiado",
+        },
+      },
+      {
+        network: "gnosis",
+        chainId: 100,
+        urls: {
+          apiURL: "https://api.gnosisscan.io/api",
+          browserURL: "https://gnosisscan.io/",
+          // Blockscout
+          // apiURL: "https://blockscout.com/xdai/mainnet/api",
+          // browserURL: "https://blockscout.com/xdai/mainnet",
         },
       },
     ],

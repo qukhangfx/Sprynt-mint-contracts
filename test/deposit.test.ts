@@ -1,7 +1,7 @@
-import { ethers } from "hardhat";
 import { expect } from "chai";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import * as helpers from "@nomicfoundation/hardhat-network-helpers";
+import { ethers } from "hardhat";
 
 import {
   DepositFactoryContract,
@@ -115,6 +115,14 @@ describe("Test multichain minting engine", () => {
       staticNativeTokenFeed.address
     )) as ChainLinkPriceFeed;
     await chainlinkPriceFeed.deployed();
+
+    await expect(
+      chainlinkPriceFeed.connect(owner).transferOwner(validatorRoleAccountAddress)
+    ).to.be.fulfilled;
+
+    await expect(
+      chainlinkPriceFeed.connect(validatorRoleAccount).transferOwner(ownerAddress)
+    ).to.be.fulfilled;
 
     const TestTokenFactory = await ethers.getContractFactory("TestToken");
     usdcToken = (await TestTokenFactory.deploy(
@@ -332,8 +340,22 @@ describe("Test multichain minting engine", () => {
     it("[PriceFeed] convert USD to token amount", async () => {
       const usdValue = getUsdNumber(1);
       const usdValueToNativeToken = await chainlinkPriceFeed.convertUsdToTokenPrice(usdValue, ethers.constants.AddressZero);
-      const nativeToken = Number(usdValueToNativeToken) / 10 ** 18; // 18 is the decimals of native token
-      expect(isFloatEqual(nativeToken, 0.00053)).to.be.true; // ETH
+      const nativeToken = Number(usdValueToNativeToken) / 10 ** 18;
+      expect(isFloatEqual(nativeToken, 0.00053)).to.be.true;
+    });
+
+    it("[PriceFeed] convert token amount to USD", async () => {
+      const ethToUsd = await chainlinkPriceFeed.convertTokenPriceToUsd(getBigNumber(0.000533746609774971), ethers.constants.AddressZero);
+      const usdValue = Number(ethToUsd) / 10 ** 8;
+      expect(isFloatEqual(usdValue, 1.0)).to.be.true;
+
+      await expect(
+        chainlinkPriceFeed.connect(owner).setNativeTokenPriceFeedAddress(staticNativeTokenFeed.address)
+      ).to.be.fulfilled;
+
+      await expect(
+        chainlinkPriceFeed.convertTokenPriceToUsd(getBigNumber(1, 6), usdcToken.address)
+      ).to.be.revertedWith("PriceFeed: not supported token!");
     });
 
     it("[Paylink] pay: revert with 'Paylink: not supported token!'", async () => {
@@ -634,6 +656,18 @@ describe("Test multichain minting engine", () => {
       expect(await simplePayContract.seller()).to.be.equal(sellerWalletAddress);
       expect(await simplePayContract.supportedTokenAddress(ethers.constants.AddressZero)).to.be.true;
       expect(await simplePayContract.supportedTokenAddress(usdcToken.address)).to.be.false;
+
+      // await expect(
+      //   simplePayContract.connect(clientWallet).transferOwner(clientWalletAddress)
+      // ).to.be.revertedWith("SimplePay: caller is not a seller");
+
+      // await expect(
+      //   simplePayContract.connect(clientWallet).transferOwner(clientWalletAddress)
+      // ).to.be.revertedWith("SimplePay: caller is not a seller");
+
+      // await expect(
+      //   simplePayContract.connect(clientWallet).transferOwner(clientWalletAddress)
+      // ).to.be.revertedWith("SimplePay: caller is not a seller");
 
       const calcPayFeeAmount = await depositFactoryContract.calcPayFeeAmount(0);
       expect(calcPayFeeAmount).to.be.equal(0);
@@ -1543,7 +1577,9 @@ describe("Test multichain minting engine", () => {
     });
 
     it("[Recurring Payment] utils", async () => {
-      const subscriptionId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("new_subscription_id"));
+      const subscriptionId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("subscription_id"));
+      const newSubscriptionId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("new_subscription_id_2"));
+      const clientSubscriptionId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("new_subscription_id_3"));
       const vpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("new_vp_id"));
 
       await expect(
@@ -1552,7 +1588,7 @@ describe("Test multichain minting engine", () => {
           vpId,
           clientWalletAddress
         )
-      ).to.be.revertedWith("RPaymentContract: call is not the validator!");
+      ).to.be.revertedWith("RPaymentContract: caller is not the validator!");
 
       await expect(
         rPaymentContract.connect(validatorRoleAccount).cancelByValidator(
@@ -1569,6 +1605,172 @@ describe("Test multichain minting engine", () => {
           clientWalletAddress
         )
       ).to.be.revertedWith("RPaymentContract: cancelled!");
+
+      await expect(
+        rPaymentContract.connect(sellerWallet).updateSupportToken(
+          ethers.constants.AddressZero,
+          false
+        )
+      ).to.be.revertedWith("RPaymentContract: caller is not the owner");
+
+      const usdValue = getUsdNumber(1);
+
+      await expect(
+        rPaymentContract.connect(sellerWallet).setup(
+          newSubscriptionId,
+          usdValue,
+          0
+        )
+      ).to.be.revertedWith("RPaymentContract: duration must be greater than 0!");
+
+
+      await expect(
+        rPaymentContract.connect(sellerWallet).setup(
+          subscriptionId,
+          usdValue,
+          1
+        )
+      ).to.be.revertedWith("RPaymentContract: already setup!");
+
+      await expect(
+        rPaymentContract.connect(clientWallet).setup(
+          clientSubscriptionId,
+          usdValue,
+          1
+        )
+      ).to.be.fulfilled;
+
+      await expect(
+        rPaymentContract.getLastestPayment(
+          clientWalletAddress,
+          vpId,
+        )
+      ).to.be.fulfilled;
+
+      await expect(
+        rPaymentContract.connect(clientWallet).unsubscribe(
+          vpId,
+        )
+      ).to.be.revertedWith("RPaymentContract: caller is not the buyer!");
+
+      const clientVpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("client_vp_id"));
+
+      await expect(
+        rPaymentContract.connect(sellerWallet).subscribe(
+          clientWalletAddress,
+          clientSubscriptionId,
+          clientVpId,
+          usdcToken.address,
+        )
+      ).to.be.revertedWith("ERC20: insufficient allowance");
+
+      await expect(
+        rPaymentContract.connect(owner).transferOwner(validatorRoleAccountAddress)
+      ).to.be.fulfilled;
+
+      await expect(
+        rPaymentContract.connect(owner).transferOwner(validatorRoleAccountAddress)
+      ).to.be.revertedWith("RPaymentContract: caller is not the owner");
+
+      await expect(
+        rPaymentContract.connect(validatorRoleAccount).setFactoryContractAddress(depositFactoryContract.address)
+      ).to.be.fulfilled;
+
+      await expect(
+        rPaymentContract.connect(validatorRoleAccount).transferOwner(ownerAddress)
+      ).to.be.fulfilled;
+
+      await expect(
+        rPaymentContract.connect(owner).updateSupportToken(
+          usdcToken.address,
+          false
+        )
+      ).to.be.fulfilled;
+
+      expect(
+        await rPaymentContract.supportedTokenAddress(usdcToken.address)
+      ).to.be.false;
+
+      await expect(
+        rPaymentContract.connect(owner).updateSupportToken(
+          usdcToken.address,
+          true
+        )
+      ).to.be.fulfilled;
+
+      expect(
+        await rPaymentContract.supportedTokenAddress(usdcToken.address)
+      ).to.be.true;
+
+      await expect(
+        usdcToken.connect(sellerWallet).approve(rPaymentContract.address, 3_000_000)
+      ).to.be.fulfilled;
+
+      await expect(
+        rPaymentContract.connect(sellerWallet).subscribe(
+          clientWalletAddress,
+          clientSubscriptionId,
+          clientVpId,
+          usdcToken.address,
+        )
+      ).to.be.fulfilled;
+
+      await expect(
+        rPaymentContract.connect(sellerWallet).unsubscribe(
+          clientVpId,
+        )
+      ).to.be.fulfilled;
+
+      await expect(
+        rPaymentContract.connect(sellerWallet).subscribe(
+          clientWalletAddress,
+          clientSubscriptionId,
+          clientVpId,
+          usdcToken.address,
+        )
+      ).to.be.revertedWith("RPaymentContract: already subscribe!");
+
+      await expect(
+        rPaymentContract.connect(sellerWallet).subscribe(
+          clientWalletAddress,
+          clientSubscriptionId,
+          ethers.utils.keccak256(ethers.utils.toUtf8Bytes("new_vp_id_4")),
+          usdcToken.address,
+        )
+      ).to.be.fulfilled;
+
+      await expect(
+        rPaymentContract.connect(clientWallet).cancelBySeller(
+          clientSubscriptionId,
+          ethers.utils.keccak256(ethers.utils.toUtf8Bytes("new_vp_id_4")),
+          sellerWalletAddress,
+        )
+      ).to.be.fulfilled;
+
+      await expect(
+        rPaymentContract.connect(sellerWallet).subscribe(
+          clientWalletAddress,
+          clientSubscriptionId,
+          ethers.utils.keccak256(ethers.utils.toUtf8Bytes("new_vp_id_5")),
+          usdcToken.address,
+        )
+      ).to.be.fulfilled;
+
+      await expect(
+        rPaymentContract.connect(clientWallet).cancelByValidator(
+          clientSubscriptionId,
+          ethers.utils.keccak256(ethers.utils.toUtf8Bytes("new_vp_id_5")),
+          sellerWalletAddress,
+        )
+      ).to.be.revertedWith("RPaymentContract: caller is not the validator!");
+
+      await expect(
+        rPaymentContract.connect(validatorRoleAccount).cancelByValidator(
+          clientSubscriptionId,
+          ethers.utils.keccak256(ethers.utils.toUtf8Bytes("new_vp_id_5")),
+          sellerWalletAddress,
+        )
+      ).to.be.fulfilled;
     });
   });
 });
